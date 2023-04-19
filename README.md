@@ -8,9 +8,9 @@ Follow the steps:
 1. Clone the repository to your local machine
 2. Install the required dependancies:
 
-'''
+```
 pip install -r requirements.txt
-'''
+```
 
 ## Usage
 Run relevant sections of jupyter/training_models.ipynb notebook
