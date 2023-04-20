@@ -6,6 +6,7 @@ import torch
 import torchmetrics
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
+import datetime
 
 
 def train_step(model: torch.nn.Module,
@@ -81,10 +82,19 @@ def train(model: torch.nn.Module,
           device: torch.device,
           config: dict,
           ):
-    
+
+    now = datetime.datetime.now()
+    print("-------")
+    print(f"New experiment started at {now.strftime('%Y-%m-%d %H:%M:%S')}\n")
+    print(f"Config: {config}\n")
+    print("-------")
+
     wandb.watch(model, loss_fn, log=config["wandb_log"], log_freq=config["wandb_log_freq"])
 
     for epoch in tqdm(range(config["epochs"])):
+
+        print(f"Epoch: {epoch}\n-------")
+
         # train loop
         train_time_start = timer()
         train_loss, train_acc = train_step(data_loader=train_data_loader,
@@ -104,6 +114,10 @@ def train(model: torch.nn.Module,
                                         device=device)
         test_time_end = timer()
         total_test_time_model = test_time_end - test_time_start
+
+        print(f"Train_loss: {train_loss:.5f} | Train_acc: {train_acc:.2f} | Total_train_time: {total_train_time_model} | \
+              Test_loss: {test_loss:.5f} | Test_acc: {test_acc:.2f} | Total_test_time: {total_test_time_model}\n")
+
         # log metrics to wandb
         wandb.log({"epoch": epoch, "train_loss": train_loss, "train_acc": train_acc,
                    "total_train_time": total_train_time_model, "test_loss": test_loss, "test_acc": test_acc,
