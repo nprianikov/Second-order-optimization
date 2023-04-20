@@ -46,7 +46,7 @@ def train_test_loaders(dataset: str, batch_size=32) -> Union[ValueError, tuple[D
                                       target_transform=None)
         test_data = datasets.CIFAR10(root="datasets", train=False, download=True, transform=ToTensor())
     elif dataset == "tmnist":
-        tmnist_dataset = TMNISTDataset("../datasets/TMNIST/TMNIST_Data.csv", transform=ToTensor())
+        tmnist_dataset = TMNISTDataset("datasets/TMNIST/TMNIST_Data.csv", transform=ToTensor())
         # split the dataset into train and test with a fixed random seed and ratio 5:1
         train_size = int(0.8 * len(tmnist_dataset))
         test_size = len(tmnist_dataset) - train_size
