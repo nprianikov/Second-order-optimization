@@ -72,18 +72,19 @@ def test_step(data_loader: torch.utils.data.DataLoader, # type: ignore
     return test_loss, test_acc
 
 
-def train(epochs: int,
-          model: torch.nn.Module,
+def train(model: torch.nn.Module,
           train_data_loader: torch.utils.data.DataLoader, # type: ignore
           test_data_loader: torch.utils.data.DataLoader, # type: ignore
           loss_fn: torch.nn.Module,
           optimizer: torch.optim.Optimizer,
           accuracy_fn: torchmetrics.Metric,
-          device: torch.device
+          device: torch.device,
+          config: dict,
           ):
-    wandb.watch(model, loss_fn, log="all")
+    
+    wandb.watch(model, loss_fn, log=config["wandb_log"], log_freq=config["wandb_log_freq"])
 
-    for epoch in tqdm(range(epochs)):
+    for epoch in tqdm(range(config["epochs"])):
         # train loop
         train_time_start = timer()
         train_loss, train_acc = train_step(data_loader=train_data_loader,
@@ -102,16 +103,14 @@ def train(epochs: int,
                                         accuracy_fn=accuracy_fn,
                                         device=device)
         test_time_end = timer()
-        total_test_time_model = train_time_end - train_time_start
+        total_test_time_model = test_time_end - test_time_start
         # log metrics to wandb
-        wandb.log({"model": model.__class__.__name__, "epoch": epoch, "train_loss": train_loss, "train_acc": train_acc,
+        wandb.log({"epoch": epoch, "train_loss": train_loss, "train_acc": train_acc,
                    "total_train_time": total_train_time_model, "test_loss": test_loss, "test_acc": test_acc,
                    "total_test_time": total_test_time_model})
 
-        # save model
-        torch.onnx.export(model, next(iter(train_data_loader))[0], f"{model.__class__.__name__}.onnx")
-        # artifact = wandb.use_artifact("int_pb/hf-end-to-end-deployment/model-1lv0fpmm:v0")  # TODO: change to your artifact
-        onnx_artifact = wandb.Artifact(f"{model.__class__.__name__}-onnx", type="model")
-        onnx_artifact.add_file(f"{model.__class__.__name__}.onnx")
-
-        wandb.log_artifact(onnx_artifact)
+    # save model
+    torch.onnx.export(model, next(iter(train_data_loader))[0], f"{model.__class__.__name__}.onnx")
+    onnx_artifact = wandb.Artifact(f"{model.__class__.__name__}-onnx", type="model")
+    onnx_artifact.add_file(f"{model.__class__.__name__}.onnx")
+    wandb.log_artifact(onnx_artifact)

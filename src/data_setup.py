@@ -6,7 +6,6 @@ from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.transforms import ToTensor
 
-
 class TMNISTDataset(torch.utils.data.Dataset):
     def __init__(self, csv_file, transform=None):
         self.data = pd.read_csv(csv_file)
@@ -46,7 +45,7 @@ def train_test_loaders(dataset: str, batch_size=32) -> Union[ValueError, tuple[D
                                       target_transform=None)
         test_data = datasets.CIFAR10(root="datasets", train=False, download=True, transform=ToTensor())
     elif dataset == "tmnist":
-        tmnist_dataset = TMNISTDataset("datasets/TMNIST/TMNIST_Data.csv", transform=ToTensor())
+        tmnist_dataset = TMNISTDataset(csv_file="../datasets/TMNIST/TMNIST_Data.csv", transform=ToTensor())
         # split the dataset into train and test with a fixed random seed and ratio 5:1
         train_size = int(0.8 * len(tmnist_dataset))
         test_size = len(tmnist_dataset) - train_size

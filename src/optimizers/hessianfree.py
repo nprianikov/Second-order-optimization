@@ -1,5 +1,3 @@
-# implementation from https://github.com/fmeirinhos/pytorch-hessianfree/blob/7136c79381b1aca8d37ae8866fe185dc938f0c1e/hessianfree.py#L91
-
 import torch
 from torch.nn.utils.convert_parameters import vector_to_parameters, parameters_to_vector
 
