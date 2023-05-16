@@ -7,8 +7,7 @@ import torchmetrics
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 import datetime
-
-
+from optimizers.hessianfree import empirical_fisher_diagonal_batched
 def train_step(model: torch.nn.Module,
                data_loader: torch.utils.data.DataLoader, # type: ignore
                loss_fn: torch.nn.Module,
@@ -21,16 +20,18 @@ def train_step(model: torch.nn.Module,
         X, y = X.to(device), y.to(device)
         # Optimizer step
         if optimizer.__class__.__name__ == "HessianFree":
-            optimizer.zero_grad()
-            _y_pred = model(X)
-            _loss = loss_fn(_y_pred, y)
-
-            # _loss.backward()
-
+            # closure
             def closure():
+                _y_pred = model(X)
+                _loss = loss_fn(_y_pred, y)
+                _loss.backward(create_graph=True)
                 return _loss, _y_pred
+            
+            def M_inv():  # inverse preconditioner
+                return empirical_fisher_diagonal_batched(model, X, y, loss_fn)
 
-            loss, y_pred = optimizer.step(closure=closure) # type: ignore
+            optimizer.zero_grad()
+            loss, y_pred = optimizer.step(closure=closure, M_inv=M_inv) # type: ignore
         else:
             # Forward pass
             y_pred = model(X)

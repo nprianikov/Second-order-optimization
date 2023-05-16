@@ -6,7 +6,6 @@ class HessianFree(torch.optim.Optimizer):
     """
     Implements the Hessian-free algorithm presented in `Training Deep and
     Recurrent Networks with Hessian-Free Optimization`_.
-
     Arguments:
         params (iterable): iterable of parameters to optimize or dicts defining
             parameter groups
@@ -21,7 +20,6 @@ class HessianFree(torch.optim.Optimizer):
         use_gnm (bool, optional): Use the generalized Gauss-Newton matrix:
             probably solves the indefiniteness of the Hessian (Section 20.6)
         verbose (bool, optional): Print statements (debugging)
-
     .. _Training Deep and Recurrent Networks with Hessian-Free Optimization:
         https://doi.org/10.1007/978-3-642-35289-8_27
     """
@@ -29,6 +27,7 @@ class HessianFree(torch.optim.Optimizer):
     def __init__(self, params,
                  lr=1,
                  damping=0.5,
+                 supress_extremes=0.85,
                  delta_decay=0.95,
                  cg_max_iter=100,
                  use_gnm=True,
@@ -45,6 +44,7 @@ class HessianFree(torch.optim.Optimizer):
 
         defaults = dict(alpha=lr,
                         damping=damping,
+                        supress_extremes=supress_extremes,
                         delta_decay=delta_decay,
                         cg_max_iter=cg_max_iter,
                         use_gnm=use_gnm,
@@ -72,7 +72,6 @@ class HessianFree(torch.optim.Optimizer):
     def step(self, closure, b=None, M_inv=None):
         """
         Performs a single optimization step.
-
         Arguments:
             closure (callable): A closure that re-evaluates the model
                 and returns a tuple of the loss and the output.
@@ -87,6 +86,7 @@ class HessianFree(torch.optim.Optimizer):
         delta_decay = group['delta_decay']
         cg_max_iter = group['cg_max_iter']
         damping = group['damping']
+        supress_extremes = group['supress_extremes']
         use_gnm = group['use_gnm']
         verbose = group['verbose']
 
@@ -117,12 +117,12 @@ class HessianFree(torch.optim.Optimizer):
 
             # Preconditioner recipe (Section 20.13)
             if m_inv.dim() == 1:
-                m = (m_inv + damping) ** (-0.85)
+                m = (m_inv + damping) ** (-supress_extremes)
 
                 def M(x):
                     return m * x
             else:
-                m = torch.inverse(m_inv + damping * torch.eye(*m_inv.shape))
+                m = torch.inverse(m_inv + damping * torch.eye(*m_inv.shape, dtype=torch.float64))
 
                 def M(x):
                     return m @ x
@@ -213,7 +213,6 @@ class HessianFree(torch.optim.Optimizer):
         """
         Minimizes the linear system x^T.A.x - x^T b using the conjugate
             gradient method
-
         Arguments:
             A (callable): An abstract linear operator implementing the
                 product A.x. A must represent a hermitian, positive definite
@@ -292,7 +291,7 @@ class HessianFree(torch.optim.Optimizer):
         """
         Jv = self._Rop(output, self._params, vec)
 
-        gradient = torch.autograd.grad(loss, output, create_graph=True)
+        gradient = torch.autograd.grad(loss, output, create_graph=True, allow_unused=True)
         HJv = self._Rop(gradient, output, Jv)
 
         JHJv = torch.autograd.grad(
@@ -325,6 +324,21 @@ def empirical_fisher_diagonal(net, xs, ys, criterion):
     grads = list()
     for (x, y) in zip(xs, ys):
         fi = criterion(net(x), y)
+        grads.append(torch.autograd.grad(fi, net.parameters(),
+                                         retain_graph=False))
+
+    vec = torch.cat([(torch.stack(p) ** 2).mean(0).detach().flatten()
+                     for p in zip(*grads)])
+    return vec
+
+
+# The empirical Fisher diagonal adapted for the batched input of neural net
+def empirical_fisher_diagonal_batched(net, xs, ys, criterion):
+    grads = list()
+    for (x, y) in zip(xs, ys):
+        # account for use of batches
+        out = net(x.unsqueeze(0))
+        fi = criterion(out.squeeze(), y)
         grads.append(torch.autograd.grad(fi, net.parameters(),
                                          retain_graph=False))
 

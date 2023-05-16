@@ -44,7 +44,7 @@ def make(config: Dict, device: torch.device) -> Tuple[torch.nn.Module, torch.uti
     if config["optimizer"] == "SGD":
         optimizer = torch.optim.SGD(params=model.parameters(), lr=config["learning_rate"])
     elif config["optimizer"] == "HessianFree":
-        optimizer = optimizers.hessianfree.HessianFree(params=model.parameters())
+        optimizer = optimizers.hessianfree.HessianFree(params=model.parameters(), lr=1, damping=0.5, cg_max_iter=50, use_gnm=True)
     elif config["optimizer"] == "PB_BFGS":
         # TODO: add PB_BFGS
         pass
