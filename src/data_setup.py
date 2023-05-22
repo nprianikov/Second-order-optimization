@@ -10,6 +10,16 @@ class TMNISTDataset(torch.utils.data.Dataset):
     def __init__(self, csv_file, transform=None):
         self.data = pd.read_csv(csv_file)
         self.transform = transform
+        self.classes = ['0 - zero',
+                        '1 - one',
+                        '2 - two',
+                        '3 - three',
+                        '4 - four',
+                        '5 - five',
+                        '6 - six',
+                        '7 - seven',
+                        '8 - eight',
+                        '9 - nine']
 
     def __len__(self):
         return len(self.data)

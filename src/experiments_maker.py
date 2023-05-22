@@ -38,13 +38,14 @@ def make(config: Dict, device: torch.device) -> Tuple[torch.nn.Module, torch.uti
                                                                         batch_size=config['batch_size'])
     
     # choose criterion
-    criterion = torchmetrics.Accuracy(task='multiclass', num_classes=len(train_data_loader.dataset.classes), average='macro')
+    n_classes = 10 # all datasets considered have 10 classes
+    criterion = torchmetrics.Accuracy(task='multiclass', num_classes=n_classes, average='macro')
     
     # choose optimizer
     if config["optimizer"] == "SGD":
         optimizer = torch.optim.SGD(params=model.parameters(), lr=config["learning_rate"])
     elif config["optimizer"] == "HessianFree":
-        optimizer = optimizers.hessianfree.HessianFree(params=model.parameters(), lr=1, damping=0.5, cg_max_iter=50, use_gnm=True)
+        optimizer = optimizers.hessianfree.HessianFree(params=model.parameters(), lr=1, damping=0.5, cg_max_iter=500, use_gnm=True)
     elif config["optimizer"] == "PB_BFGS":
         # TODO: add PB_BFGS
         pass
@@ -53,6 +54,9 @@ def make(config: Dict, device: torch.device) -> Tuple[torch.nn.Module, torch.uti
         pass
     elif config["optimizer"] == "K_LBFGS":
         # TODO: add K_LBFGS
+        pass
+    elif config["optimizer"] == "K_FAC":
+        #TODO add K_FAC
         pass
     else:
         raise ValueError("Unknown optimizer type")

@@ -4,6 +4,9 @@ datasets/*
 jupyter/*
 
 src/datasets/*
+wandb/*
+wandb
+src/datasets
 
 # dont exclude jupyter/training_models.ipynb from git
 !jupyter/training_models.ipynb

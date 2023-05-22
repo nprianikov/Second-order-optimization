@@ -32,6 +32,11 @@ def train_step(model: torch.nn.Module,
 
             optimizer.zero_grad()
             loss, y_pred = optimizer.step(closure=closure, M_inv=M_inv) # type: ignore
+
+            # clear gradients due to create_graph=True
+            for param in model.parameters():
+                param.grad = None
+
         else:
             # Forward pass
             y_pred = model(X)
