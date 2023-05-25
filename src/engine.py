@@ -15,6 +15,7 @@ def train_step(model: torch.nn.Module,
                accuracy_fn: torchmetrics.Metric,
                device: torch.device) -> Tuple[float, float]:
     train_loss, train_acc = 0, 0
+    batch_counter = 0
     for batch, (X, y) in enumerate(data_loader):
         # Send data to GPU
         X, y = X.to(device), y.to(device)
@@ -34,8 +35,8 @@ def train_step(model: torch.nn.Module,
             loss, y_pred = optimizer.step(closure=closure, M_inv=M_inv) # type: ignore
 
             # clear gradients due to create_graph=True
-            for param in model.parameters():
-                param.grad = None
+            # for param in model.parameters():
+            #     param.grad = None
 
         else:
             # Forward pass
@@ -48,11 +49,15 @@ def train_step(model: torch.nn.Module,
             loss.backward()
             optimizer.step()
 
-        train_loss += loss
+        if batch_counter % 10 == 0:
+            print(f"Batch: {batch_counter}\nLoss: {loss.item()}\n-------")
+
+        train_loss += loss.item()
         train_acc += accuracy_fn(y_pred.argmax(dim=1), y).item()
+        batch_counter = batch
     # Calculate loss and accuracy per epoch and print out what's happening
-    train_loss /= len(data_loader)
-    train_acc /= len(data_loader)
+    train_loss /= batch_counter
+    train_acc /= batch_counter
     return train_loss, train_acc
 
 
@@ -63,19 +68,21 @@ def test_step(data_loader: torch.utils.data.DataLoader, # type: ignore
               device: torch.device) -> Tuple[float, float]:
     test_loss, test_acc = 0, 0
     model.eval()  # put model in eval mode
+    batch_counter = 0
     # Turn on inference context manager
     with torch.inference_mode():
-        for X, y in data_loader:
+        for batch, (X, y) in enumerate(data_loader):
             # Send data to GPU
             X, y = X.to(device), y.to(device)
             # 1. Forward pass
             test_pred = model(X)
             # 2. Calculate loss and accuracy
-            test_loss += loss_fn(test_pred, y)
+            test_loss += loss_fn(test_pred, y).item()
             test_acc += accuracy_fn(test_pred.argmax(dim=1), y).item()
+            batch_counter = batch
         # Adjust metrics and print out
-        test_loss /= len(data_loader)
-        test_acc /= len(data_loader)
+        test_loss /= batch_counter
+        test_acc /= batch_counter
     return test_loss, test_acc
 
 
@@ -130,7 +137,7 @@ def train(model: torch.nn.Module,
                    "total_test_time": total_test_time_model})
 
     # save model
-    torch.onnx.export(model, next(iter(train_data_loader))[0], f"{model.__class__.__name__}.onnx")
-    onnx_artifact = wandb.Artifact(f"{model.__class__.__name__}-onnx", type="model")
-    onnx_artifact.add_file(f"{model.__class__.__name__}.onnx")
-    wandb.log_artifact(onnx_artifact)
+    # torch.onnx.export(model, next(iter(train_data_loader))[0], f"{model.__class__.__name__}.onnx")
+    # onnx_artifact = wandb.Artifact(f"{model.__class__.__name__}-onnx", type="model")
+    # onnx_artifact.add_file(f"{model.__class__.__name__}.onnx")
+    # wandb.log_artifact(onnx_artifact)

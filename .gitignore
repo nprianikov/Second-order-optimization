@@ -8,6 +8,14 @@ wandb/*
 wandb
 src/datasets
 
+scr/kfac.py
+src/train_models_debug.py
+toy_problems/debugging_grads.ipynb
+toy_problems/grad.ipynb
+toy_problems/hf_2.py
+toy_problems/hf.py
+toy_problems/himmelblau.ipynb
+
 # dont exclude jupyter/training_models.ipynb from git
 !jupyter/training_models.ipynb
 

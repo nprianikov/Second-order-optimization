@@ -35,7 +35,7 @@ class TMNISTDataset(torch.utils.data.Dataset):
         return image, label
 
 
-def train_test_loaders(dataset: str, batch_size=32) -> Union[ValueError, tuple[DataLoader[Any], DataLoader[Any]]]:
+def train_test_loaders(dataset: str, batch_size=32):
     """
     Returns dataloaders for the specified dataset name
     :param dataset: name of the dataset
