@@ -7,13 +7,14 @@ import torchmetrics
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 import datetime
-from optimizers.hessianfree import empirical_fisher_diagonal_batched
+from src.optimizers.hessianfree import empirical_fisher_diagonal_batched
 def train_step(model: torch.nn.Module,
                data_loader: torch.utils.data.DataLoader, # type: ignore
                loss_fn: torch.nn.Module,
                optimizer: torch.optim.Optimizer,
                accuracy_fn: torchmetrics.Metric,
-               device: torch.device) -> Tuple[float, float]:
+               device: torch.device,
+               batch_log = 0) -> Tuple[float, float]:
     train_loss, train_acc = 0, 0
     batch_counter = 0
     for batch, (X, y) in enumerate(data_loader):
@@ -35,9 +36,8 @@ def train_step(model: torch.nn.Module,
             loss, y_pred = optimizer.step(closure=closure, M_inv=M_inv) # type: ignore
 
             # clear gradients due to create_graph=True
-            # for param in model.parameters():
-            #     param.grad = None
-
+            for param in model.parameters():
+                param.grad = None
         else:
             # Forward pass
             y_pred = model(X)
@@ -49,8 +49,10 @@ def train_step(model: torch.nn.Module,
             loss.backward()
             optimizer.step()
 
-        if batch_counter % 10 == 0:
-            print(f"Batch: {batch_counter}\nLoss: {loss.item()}\n-------")
+        # Log metrics
+        if batch_log > 0 and batch % batch_log == 0:
+            print(f"Batch: {batch_counter}\nLoss: {loss.item()}\nAccuracy: {accuracy_fn(y_pred.argmax(dim=1), y).item()}\n-------")
+            wandb.log({"batch_train_loss": loss.item(), "batch_train_accuracy": accuracy_fn(y_pred.argmax(dim=1), y).item()})
 
         train_loss += loss.item()
         train_acc += accuracy_fn(y_pred.argmax(dim=1), y).item()
@@ -102,7 +104,8 @@ def train(model: torch.nn.Module,
     print(f"Config: {config}\n")
     print("-------")
 
-    wandb.watch(model, loss_fn, log=config["wandb_log"], log_freq=config["wandb_log_freq"])
+    if config["wandb_log"] != None:
+        wandb.watch(model, loss_fn, log=config["wandb_log"], log_freq=config["wandb_log_freq"])
 
     for epoch in tqdm(range(config["epochs"])):
 
@@ -115,7 +118,8 @@ def train(model: torch.nn.Module,
                                            loss_fn=loss_fn,
                                            optimizer=optimizer,
                                            accuracy_fn=accuracy_fn,
-                                           device=device)
+                                           device=device,
+                                           batch_log=config["wandb_log_batch"])
         train_time_end = timer()
         total_train_time_model = train_time_end - train_time_start
         # test loop

@@ -2,8 +2,8 @@ import torch
 from torch import nn
 import torchmetrics
 import numpy as np
-import engine
-import experiments_maker
+import src.engine as engine
+import src.experiments_maker as experiments_maker
 import wandb
 import argparse
 
@@ -41,46 +41,30 @@ wandb_logs = ["all", "gradients", "parameters", None]
 device = "cuda" if torch.cuda.is_available() else "cpu"
 loss_fn = nn.CrossEntropyLoss()
 
-if args.loop == 1:
+def main():
+    wandb.init(project="baselines-sweeps")
+    # make the model, data and optimization
+    main_config = wandb.config
+    print(main_config)
+    model, train_dataloader, test_dataloader, optimizer, criterion = experiments_maker.make(
+        main_config, device, 
+        damping=main_config.damping, supress_extremes=main_config.supress_extremes, cg_max_iter=main_config.cg_max_iter)
+    engine.train(model, train_dataloader, test_dataloader, loss_fn, optimizer, criterion, device, main_config)
 
-    # datasets_names = ['mnist', 'tmnist','fashion_mnist', 'cifar10']
-    # optimizers_names = ['SGD', 'HessianFree', 'PB_BFGS', 'K_BFGS', 'K_LBFGS']
-    # models_names = ['SmallCNN', 'DepthCNN', 'WidthCNN', 'DepthWidthCNN']
+sweep_config = {
+    'method': 'random',
+    'metric': {
+        'goal': 'minimize',
+        'name': 'train_loss'
+    },
+    'parameters': {
+        'damping': {'min': 0.5, 'max': 0.95},
+        'supress_extremes': {'min': 0.65, 'max': 0.95},
+        'cg_max_iter': {'values': [100, 200, 300, 400, 500]}
+    }
+}
 
-    # experimental run v0.2
-    datasets_names = ['tmnist']
-    optimizers_names = ['SGD']#, 'HessianFree']
-    models_names = ['SmallCNN']
-
-    for dataset_name in datasets_names:
-        for optimizer_name in optimizers_names:
-            for model_name in models_names:
-
-                config = dict(
-                    epochs=args.epochs,
-                    learning_rate=args.lr,
-                    batch_size=args.batch_size,
-                    dataset=dataset_name, # iterable
-                    optimizer=optimizer_name, # iterable
-                    model=model_name, # iterable
-                    architecture="CNN",
-                    wandb_log=wandb_logs[args.wandb_log],
-                    wandb_log_freq=args.wandb_log_freq,
-                    slice_size=args.data_slice,
-                    activation_fn=args.activation_fn,
-                    dropout=args.dropout
-                )
-
-                with wandb.init(project="baselines_cnn", config=config, mode=wandb_modes[args.wandb_mode]):
-                    config = wandb.config
-                    # make the model, data and optimization
-                    model, train_dataloader, test_dataloader, optimizer, criterion = experiments_maker.make(config, device)
-                    engine.train(model, train_dataloader, test_dataloader, loss_fn, optimizer, criterion, device, config)
-
-                wandb.finish()
-else:
-
-    config = dict(
+config = dict(
         epochs=args.epochs,
         learning_rate=args.lr,
         batch_size=args.batch_size,
@@ -92,12 +76,19 @@ else:
         wandb_log_freq=args.wandb_log_freq,
         slice_size=args.data_slice,
         activation_fn=args.activation_fn,
-        dropout=args.dropout
+        dropout=args.dropout,
     )
 
-    with wandb.init(project="baselines_cnn", config=config, mode=wandb_modes[args.wandb_mode]):
-        # make the model, data and optimization
-        model, train_dataloader, test_dataloader, optimizer, criterion = experiments_maker.make(config, device)
-        engine.train(model, train_dataloader, test_dataloader, loss_fn, optimizer, criterion, device, config)
+def wrap_values(config):
+    return {key: {'value': value} for key, value in config.items()}
 
-    wandb.finish()
+sweep_config['parameters'].update(wrap_values(config))
+
+sweep_id = wandb.sweep(
+    sweep_config, 
+    project="baselines-sweeps"
+    )
+
+wandb.agent(sweep_id, function=main, count=10)
+
+wandb.finish()

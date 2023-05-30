@@ -1,41 +1,36 @@
 from typing import Tuple, Dict
 
 import torch.utils.data
+from torch import nn
 import torchmetrics
 
-import data_setup
-import optimizers.hessianfree
-from model_builder import SmallCNN, DepthCNN, WidthCNN, DepthWidthCNN
+import src.data_setup as data_setup
+import src.optimizers.hessianfree as hessianfree
+from src.model_builder import SmallCNN, DepthCNN, WidthCNN, DepthWidthCNN
 
 
-def make(config: Dict, device: torch.device) -> Tuple[torch.nn.Module, torch.utils.data.DataLoader,
+def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module, torch.utils.data.DataLoader,
                                                       torch.utils.data.DataLoader, torch.optim.Optimizer, torchmetrics.Accuracy]:
-    if config is None:
-        config = {
-            "epochs": 3,
-            "learning_rate": 1e-3,
-            "batch_size": 32,
-            "dataset": "mnist",
-            "optimizer": "SGD",
-            "model": "SmallCNN",
-            "architecture": "CNN"
-        }
-
+    """
+    Makes the experiment, i.e. loads the model, the data, the optimizer and the criterion
+    Arguments:
+        config: dictionary containing the configuration of the experiment
+        device: torch.device object
+        **kwargs: additional arguments for the specific optimizer
+    """
     # choose model
-    if config["model"] == "SmallCNN":
-        model = SmallCNN(dataset=config["dataset"]).to(device)
-    elif config["model"] == "DepthCNN":
-        model = DepthCNN(dataset=config["dataset"]).to(device)
-    elif config["model"] == "WidthCNN":
-        model = WidthCNN(dataset=config["dataset"]).to(device)
-    elif config["model"] == "DepthWidthCNN":
-        model = DepthWidthCNN(dataset=config["dataset"]).to(device)
-    else:
-        raise ValueError("Unknown model type")
+    activation_fn_dict = {"tanh": nn.Tanh, "relu":nn.ReLU, 'sigmoid': nn.Sigmoid}
+    models_dict = {"SmallCNN": SmallCNN, "DepthCNN": DepthCNN, "WidthCNN": WidthCNN, "DepthWidthCNN": DepthWidthCNN}
+    model = models_dict[config["model"]](
+        input_shape=3 if config["dataset"] == "cifar10" else 1,
+        activation_fn=activation_fn_dict[config["activation_fn"].lower()], 
+        p=config["dropout"],
+        dataset=config["dataset"]).to(device)
     
     # load data
     train_data_loader, test_data_loader = data_setup.train_test_loaders(dataset=config['dataset'],
-                                                                        batch_size=config['batch_size'])
+                                                                        batch_size=config['batch_size'], 
+                                                                        slice_size=config["slice_size"])
     
     # choose criterion
     n_classes = 10 # all datasets considered have 10 classes
@@ -45,7 +40,7 @@ def make(config: Dict, device: torch.device) -> Tuple[torch.nn.Module, torch.uti
     if config["optimizer"] == "SGD":
         optimizer = torch.optim.SGD(params=model.parameters(), lr=config["learning_rate"])
     elif config["optimizer"] == "HessianFree":
-        optimizer = optimizers.hessianfree.HessianFree(params=model.parameters(), lr=1, damping=0.5, cg_max_iter=500, use_gnm=True)
+        optimizer = hessianfree.HessianFree(params=model.parameters(), **kwargs)
     elif config["optimizer"] == "PB_BFGS":
         # TODO: add PB_BFGS
         pass

@@ -1,91 +1,246 @@
 import torch
 from torch import nn
+from src.layers_factory import LayersFactory
 
 
 class SmallCNN(nn.Module):
     def __init__(self, input_shape=1, output_shape=10, activation_fn=nn.ReLU, p=0.5, dataset="mnist"):
         super(SmallCNN, self).__init__()
-        # predefined convolutions
-        self.convIn_32 = nn.Conv2d(in_channels=input_shape, out_channels=32, kernel_size=3, stride=1)
-        self.conv32_32 = nn.Conv2d(32, 32, kernel_size=3, stride=1)
-        self.conv32_64 = nn.Conv2d(32, 64, kernel_size=3, stride=1)
-        # predefined standard layers
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=1)
-        self.flatten = nn.Flatten()
-        self.dropout = nn.Dropout(p)
+        # factory
+        self.lfc = LayersFactory(input_shape, output_shape, p, dataset)
+        # unique
         self.activation_fn = activation_fn()
-        # predefined fully connected layer
-        self.fcSmall = nn.Linear(in_features=(23 * 23 * 64 if dataset == "cifar10" else 19 * 19 * 64), out_features=64)
-        # output layers
-        self.fc64_Out = nn.Linear(in_features=64, out_features=output_shape)
+        self.convIn_32 = self.lfc.create_layer('convIn_32')
+        self.flatten = self.lfc.create_layer('flatten')
+        self.fcSmall = self.lfc.create_layer('fcSmall')
+        self.fc64_Out = self.lfc.create_layer('fc64_Out')
+        self.pool = self.lfc.create_layer('pool')
+        self.dropout = self.lfc.create_layer('dropout')
 
+        self.conv1 = nn.Sequential(
+            self.convIn_32,
+            self.activation_fn,
+            self.pool,
+        )
+
+        self.conv2 = nn.Sequential(
+            self.lfc.create_layer('conv32_32'),
+            self.activation_fn,
+            self.pool,
+        )
+
+        self.conv3 = nn.Sequential(
+            self.lfc.create_layer('conv32_64'),
+            self.activation_fn,
+            self.pool,
+        )
+
+        self.out = nn.Sequential(
+            self.flatten,
+            self.fcSmall,
+            self.activation_fn,
+            self.dropout,
+            self.fc64_Out,
+        )
+        
     def forward(self, x):
-        x = self.pool(self.activation_fn(self.convIn_32(x)))
-        x = self.pool(self.activation_fn(self.conv32_32(x)))
-        x = self.pool(self.activation_fn(self.conv32_64(x)))
-        x = self.dropout(self.activation_fn(self.fcSmall(self.flatten(x))))
-        x = self.fc64_Out(x)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.out(x)
         return x
 
 
-class DepthCNN(SmallCNN):
+class DepthCNN(nn.Module):
     def __init__(self, input_shape=1, output_shape=10, activation_fn=nn.ReLU, p=0.5, dataset="mnist"):
-        super(DepthCNN, self).__init__(input_shape, output_shape, activation_fn, p, dataset)
-        # predefined convolutions
-        self.conv64_64 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
-        # predefined fully connected layer
-        self.fcDepth = nn.Linear(in_features=(17 * 17 * 64 if dataset == "cifar10" else 13 * 13 * 64), out_features=64)
+        super(DepthCNN, self).__init__()
+        # factory
+        self.lfc = LayersFactory(input_shape, output_shape, p, dataset)
+        # unique
+        self.activation_fn = activation_fn()
+        self.convIn_32 = self.lfc.create_layer('convIn_32')
+        self.flatten = self.lfc.create_layer('flatten')
+        self.fcDepth = self.lfc.create_layer('fcDepth')
+        self.fc64_Out = self.lfc.create_layer('fc64_Out')
+        self.pool = self.lfc.create_layer('pool')
+        self.dropout = self.lfc.create_layer('dropout')
+
+        self.conv1 = nn.Sequential(
+            self.convIn_32,
+            self.activation_fn,
+            self.dropout,
+        )
+
+        self.conv2 = nn.Sequential(
+            self.lfc.create_layer('conv32_32'),
+            self.activation_fn,
+            self.dropout,
+            self.pool,
+        )
+
+        self.conv3 = nn.Sequential(
+            self.lfc.create_layer('conv32_32'),
+            self.dropout,
+            self.activation_fn,
+        )
+
+        self.conv4 = nn.Sequential(
+            self.lfc.create_layer('conv32_32'),
+            self.activation_fn,
+            self.dropout,
+            self.pool,
+        )
+
+        self.conv5 = nn.Sequential(
+            self.lfc.create_layer('conv32_64'),
+            self.activation_fn,
+            self.dropout,
+        )
+
+        self.conv6 = nn.Sequential(
+            self.lfc.create_layer('conv64_64'),
+            self.activation_fn,
+            self.dropout,
+            self.pool,
+        )
+
+        self.out = nn.Sequential(
+            self.flatten,
+            self.fcDepth,
+            self.activation_fn,
+            self.dropout,
+            self.fc64_Out,
+        )
 
     def forward(self, x):
-        x = self.dropout(self.activation_fn(self.convIn_32(x)))
-        x = self.pool(self.dropout(self.activation_fn(self.conv32_32(x))))
-        x = self.dropout(self.activation_fn(self.conv32_32(x)))
-        x = self.pool(self.dropout(self.activation_fn(self.conv32_32(x))))
-        x = self.dropout(self.activation_fn(self.conv32_64(x)))
-        x = self.pool(self.dropout(self.activation_fn(self.conv64_64(x))))
-        x = self.dropout(self.activation_fn(self.fcDepth(self.flatten(x))))
-        x = self.fc64_Out(x)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.conv5(x)
+        x = self.conv6(x)
+        x = self.out(x)
         return x
 
 
-class WidthCNN(SmallCNN):
+class WidthCNN(nn.Module):
     def __init__(self, input_shape=1, output_shape=10, activation_fn=nn.ReLU, p=0.5, dataset="mnist"):
-        super(WidthCNN, self).__init__(input_shape, output_shape, activation_fn, p, dataset)
-        # predefined convolutions
-        self.convIn_64 = nn.Conv2d(in_channels=input_shape, out_channels=64, kernel_size=3, stride=1)
-        self.conv64_64 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
-        self.conv64_128 = nn.Conv2d(64, 128, kernel_size=3, stride=1)
-        self.conv128_128 = nn.Conv2d(128, 128, kernel_size=3, stride=1)
-        self.conv128_64 = nn.Conv2d(128, 64, kernel_size=3, stride=1)
-        # predefined fully connected layer
-        self.fcWidth = nn.Linear(in_features=(23 * 23 * 128 if dataset == "cifar10" else 19 * 19 * 128),
-                                 out_features=128)
-        # output layers
-        self.fc128_Out = nn.Linear(in_features=128, out_features=output_shape)
+        super(WidthCNN, self).__init__()
+        # factory
+        self.lfc = LayersFactory(input_shape, output_shape, p, dataset)
+        # unique
+        self.activation_fn = activation_fn()
+        self.convIn_64 = self.lfc.create_layer('convIn_64')
+        self.flatten = self.lfc.create_layer('flatten')
+        self.fcWidth = self.lfc.create_layer('fcWidth')
+        self.fc128_Out = self.lfc.create_layer('fc128_Out')
+        self.pool = self.lfc.create_layer('pool')
+        self.dropout = self.lfc.create_layer('dropout')
+
+        self.conv1 = nn.Sequential(
+            self.convIn_64,
+            self.activation_fn,
+            self.dropout,
+            self.pool,
+        )
+
+        self.conv2 = nn.Sequential(
+            self.lfc.create_layer('conv64_64'),
+            self.activation_fn,
+            self.dropout,
+            self.pool,
+        )
+
+        self.conv3 = nn.Sequential(
+            self.lfc.create_layer('conv64_128'),
+            self.activation_fn,
+            self.dropout,
+            self.pool,
+        )
+
+        self.out = nn.Sequential(
+            self.flatten,
+            self.fcWidth,
+            self.activation_fn,
+            self.dropout,
+            self.fc128_Out,
+        )
 
     def forward(self, x):
-        x = self.pool(self.dropout(self.activation_fn(self.convIn_64(x))))
-        x = self.pool(self.dropout(self.activation_fn(self.conv64_64(x))))
-        x = self.pool(self.dropout(self.activation_fn(self.conv64_128(x))))
-        x = self.dropout(self.activation_fn(self.fcWidth(self.flatten(x))))
-        x = self.fc128_Out(x)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.out(x)
         return x
 
 
-class DepthWidthCNN(DepthCNN, WidthCNN):
+class DepthWidthCNN(nn.Module):
     def __init__(self, input_shape=1, output_shape=10, activation_fn=nn.ReLU, p=0.5, dataset="mnist"):
-        super(DepthWidthCNN, self).__init__(input_shape, output_shape, activation_fn, p, dataset)
-        # predefined fully connected layer
-        self.fcDepthWidth = nn.Linear(in_features=(17 * 17 * 64 if dataset == "cifar10" else 13 * 13 * 64),
-                                      out_features=128)
+        super(DepthWidthCNN, self).__init__()
+        # factory
+        self.lfc = LayersFactory(input_shape, output_shape, p, dataset)
+        # unique
+        self.activation_fn = activation_fn()
+        self.convIn_64 = self.lfc.create_layer('convIn_64')
+        self.flatten = self.lfc.create_layer('flatten')
+        self.fcDepthWidth = self.lfc.create_layer('fcDepthWidth')
+        self.fc128_Out = self.lfc.create_layer('fc128_Out')
+        self.pool = self.lfc.create_layer('pool')
+        self.dropout = self.lfc.create_layer('dropout')
+
+        self.conv1 = nn.Sequential(
+            self.convIn_64,
+            self.activation_fn,
+            self.dropout,
+        )
+
+        self.conv2 = nn.Sequential(
+            self.lfc.create_layer('conv64_64'),
+            self.activation_fn,
+            self.dropout,
+            self.pool,
+        )
+
+        self.conv3 = nn.Sequential(
+            self.lfc.create_layer('conv64_64'),
+            self.activation_fn,
+            self.dropout,
+        )
+
+        self.conv4 = nn.Sequential(
+            self.lfc.create_layer('conv64_64'),
+            self.activation_fn,
+            self.dropout,
+            self.pool,
+        )
+
+        self.conv5 = nn.Sequential(
+            self.lfc.create_layer('conv64_128'),
+            self.activation_fn,
+            self.dropout,
+        )
+
+        self.conv6 = nn.Sequential(
+            self.lfc.create_layer('conv128_128'),
+            self.activation_fn,
+            self.dropout,
+            self.pool,
+        )
+
+        self.out = nn.Sequential(
+            self.flatten,
+            self.fcDepthWidth,
+            self.activation_fn,
+            self.dropout,
+            self.fc128_Out,
+        )
 
     def forward(self, x):
-        x = self.dropout(self.activation_fn(self.convIn_64(x)))
-        x = self.pool(self.dropout(self.activation_fn(self.conv64_64(x))))
-        x = self.dropout(self.activation_fn(self.conv64_64(x)))
-        x = self.pool(self.dropout(self.activation_fn(self.conv64_64(x))))
-        x = self.dropout(self.activation_fn(self.conv64_128(x)))
-        x = self.pool(self.dropout(self.activation_fn(self.conv128_64(x))))
-        x = self.dropout(self.activation_fn(self.fcDepthWidth(self.flatten(x))))
-        x = self.fc128_Out(x)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.conv5(x)
+        x = self.conv6(x)
+        x = self.out(x)
         return x

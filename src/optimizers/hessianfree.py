@@ -24,12 +24,12 @@ class HessianFree(torch.optim.Optimizer):
         https://doi.org/10.1007/978-3-642-35289-8_27
     """
 
-    def __init__(self, params,
-                 lr=1,
-                 damping=0.5,
-                 supress_extremes=0.85,
-                 delta_decay=0.95,
-                 cg_max_iter=100,
+    def __init__(self, params, 
+                 lr=1, 
+                 damping=0.9, 
+                 supress_extremes=0.95, 
+                 delta_decay=0.95, 
+                 cg_max_iter=50, 
                  use_gnm=True,
                  verbose=False):
 
