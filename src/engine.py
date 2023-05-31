@@ -8,7 +8,7 @@ import torchmetrics
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 import datetime
-from optimizers.hessianfree import empirical_fisher_diagonal_batched
+from src.optimizers.hessianfree import empirical_fisher_diagonal_batched
 
 def train_step(model: torch.nn.Module,
                data_loader: torch.utils.data.DataLoader, # type: ignore
@@ -121,8 +121,11 @@ def train(model: torch.nn.Module,
     print(f"Config: {config}\n")
     print("-------")
 
-    if config["wandb_log"] != None:
-        wandb.watch(model, loss_fn, log=config["wandb_log"], log_freq=config["wandb_log_freq"])
+    # wandb logging extra
+    wandb_logs = ["all", "gradients", "parameters", None]
+    wandb_log = wandb_logs[config["wandb_log"]]
+    if wandb_log != None:
+        wandb.watch(model, loss_fn, log=wandb_log, log_freq=config["wandb_log_freq"])
 
     for epoch in tqdm(range(config["epochs"])):
 

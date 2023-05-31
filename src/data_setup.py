@@ -44,19 +44,20 @@ def train_test_loaders(dataset: str, batch_size=32, slice_size=1.0):
     :param batch_size: batch size
     :return: train and test dataloaders
     """
+    root_path = os.path.join(os.getcwd(), '..', 'datasets')
     # load full datasets
     if dataset == "mnist":
-        train_data = datasets.MNIST(root="datasets", train=True, download=True, transform=ToTensor(),
+        train_data = datasets.MNIST(root=root_path, train=True, download=True, transform=ToTensor(),
                                     target_transform=None)
-        test_data = datasets.MNIST(root="datasets", train=False, download=True, transform=ToTensor())
+        test_data = datasets.MNIST(root=root_path, train=False, download=True, transform=ToTensor())
     elif dataset == "fashion_mnist":
-        train_data = datasets.FashionMNIST(root="datasets", train=True, download=True, transform=ToTensor(),
+        train_data = datasets.FashionMNIST(root=root_path, train=True, download=True, transform=ToTensor(),
                                            target_transform=None)
-        test_data = datasets.FashionMNIST(root="datasets", train=False, download=True, transform=ToTensor())
+        test_data = datasets.FashionMNIST(root=root_path, train=False, download=True, transform=ToTensor())
     elif dataset == "cifar10":
-        train_data = datasets.CIFAR10(root="datasets", train=True, download=True, transform=ToTensor(),
+        train_data = datasets.CIFAR10(root=root_path, train=True, download=True, transform=ToTensor(),
                                       target_transform=None)
-        test_data = datasets.CIFAR10(root="datasets", train=False, download=True, transform=ToTensor())
+        test_data = datasets.CIFAR10(root=root_path, train=False, download=True, transform=ToTensor())
     elif dataset == "tmnist":
         path = os.path.join(os.getcwd(), '..', 'datasets', 'TMNIST', 'TMNIST_Data.csv')
         tmnist_dataset = TMNISTDataset(csv_file=path, transform=ToTensor())

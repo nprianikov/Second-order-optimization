@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from layers_factory import LayersFactory
+from src.layers_factory import LayersFactory
 
 
 class SmallCNN(nn.Module):

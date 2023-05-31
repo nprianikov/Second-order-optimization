@@ -3,10 +3,11 @@ from typing import Tuple, Dict
 import torch.utils.data
 from torch import nn
 import torchmetrics
+import numpy as np
 
-import data_setup
-import optimizers.hessianfree as hessianfree
-from model_builder import SmallCNN, DepthCNN, WidthCNN, DepthWidthCNN
+import src.data_setup as data_setup
+import src.optimizers.hessianfree as hessianfree
+from src.model_builder import SmallCNN, DepthCNN, WidthCNN, DepthWidthCNN
 
 
 def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module, torch.utils.data.DataLoader,
@@ -18,6 +19,11 @@ def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module,
         device: torch.device object
         **kwargs: additional arguments for the specific optimizer
     """
+    # set the seed for reproducibility
+    np.random.seed(42)
+    torch.manual_seed(42)
+    torch.cuda.manual_seed(42)
+    
     # choose model
     activation_fn_dict = {"tanh": nn.Tanh, "relu":nn.ReLU, 'sigmoid': nn.Sigmoid}
     models_dict = {"SmallCNN": SmallCNN, "DepthCNN": DepthCNN, "WidthCNN": WidthCNN, "DepthWidthCNN": DepthWidthCNN}
@@ -38,7 +44,7 @@ def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module,
     
     # choose optimizer
     if config["optimizer"] == "SGD":
-        optimizer = torch.optim.SGD(params=model.parameters(), lr=config["learning_rate"])
+        optimizer = torch.optim.SGD(params=model.parameters(), lr=config["lr"])
     elif config["optimizer"] == "HessianFree":
         optimizer = hessianfree.HessianFree(params=model.parameters(), **kwargs)
     elif config["optimizer"] == "PB_BFGS":
