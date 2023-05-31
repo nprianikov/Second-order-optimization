@@ -52,6 +52,7 @@ sweep_config = {
         'slice_size': {'values': [1.0] },
         'activation_fn': {'values': ["Tanh", "ReLU"]},
         'dropout': {'values': [0.0]},
+        'checkpoints': {'values': [0]},
     }
 }
 

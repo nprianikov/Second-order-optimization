@@ -26,8 +26,8 @@ class HessianFree(torch.optim.Optimizer):
 
     def __init__(self, params, 
                  lr=1, 
-                 damping=0.9, 
-                 supress_extremes=0.95, 
+                 damping=1e-2, 
+                 supress_extremes=0.75, 
                  delta_decay=0.95, 
                  cg_max_iter=50, 
                  use_gnm=True,

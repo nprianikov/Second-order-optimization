@@ -1,5 +1,6 @@
 from timeit import default_timer as timer
 from typing import Tuple
+import os
 
 import wandb
 import torch
@@ -7,14 +8,17 @@ import torchmetrics
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 import datetime
-from src.optimizers.hessianfree import empirical_fisher_diagonal_batched
+from optimizers.hessianfree import empirical_fisher_diagonal_batched
+
 def train_step(model: torch.nn.Module,
                data_loader: torch.utils.data.DataLoader, # type: ignore
                loss_fn: torch.nn.Module,
                optimizer: torch.optim.Optimizer,
                accuracy_fn: torchmetrics.Metric,
                device: torch.device,
-               batch_log = 0) -> Tuple[float, float]:
+               epoch: int,
+               batch_log = 0,
+               checkpoints = []) -> Tuple[float, float]:
     train_loss, train_acc = 0, 0
     batch_counter = 0
     for batch, (X, y) in enumerate(data_loader):
@@ -53,6 +57,13 @@ def train_step(model: torch.nn.Module,
         if batch_log > 0 and batch % batch_log == 0:
             print(f"Batch: {batch_counter}\nLoss: {loss.item()}\nAccuracy: {accuracy_fn(y_pred.argmax(dim=1), y).item()}\n-------")
             wandb.log({"batch_train_loss": loss.item(), "batch_train_accuracy": accuracy_fn(y_pred.argmax(dim=1), y).item()})
+        # Log checkpoints
+        if len(checkpoints) > 0 and batch in checkpoints:
+            file = f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}_epoch_{epoch}_batch_{batch}.pth"
+            torch.save(obj=model.state_dict(), f=file)
+            checkpoint_artifact = wandb.Artifact(f"checkpoint-epoch-{epoch}-batch-{batch}-pt", type="model")
+            checkpoint_artifact.add_file(file)
+            wandb.log_artifact(checkpoint_artifact)
 
         train_loss += loss.item()
         train_acc += accuracy_fn(y_pred.argmax(dim=1), y).item()
@@ -98,6 +109,12 @@ def train(model: torch.nn.Module,
           config: dict,
           ):
 
+    # create checkpoints
+    checkpoints = []
+    if config["checkpoints"] > 0:
+        step = len(train_data_loader) // config["checkpoints"]
+        checkpoints = [step*i-1 for i in range(1, config["checkpoints"]+1)]
+
     now = datetime.datetime.now()
     print("-------")
     print(f"New experiment started at {now.strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -119,7 +136,9 @@ def train(model: torch.nn.Module,
                                            optimizer=optimizer,
                                            accuracy_fn=accuracy_fn,
                                            device=device,
-                                           batch_log=config["wandb_log_batch"])
+                                           epoch=epoch,
+                                           batch_log=config["wandb_log_batch"],
+                                           checkpoints = checkpoints)
         train_time_end = timer()
         total_train_time_model = train_time_end - train_time_start
         # test loop
@@ -139,9 +158,3 @@ def train(model: torch.nn.Module,
         wandb.log({"epoch": epoch, "train_loss": train_loss, "train_acc": train_acc,
                    "total_train_time": total_train_time_model, "test_loss": test_loss, "test_acc": test_acc,
                    "total_test_time": total_test_time_model})
-
-    # save model
-    # torch.onnx.export(model, next(iter(train_data_loader))[0], f"{model.__class__.__name__}.onnx")
-    # onnx_artifact = wandb.Artifact(f"{model.__class__.__name__}-onnx", type="model")
-    # onnx_artifact.add_file(f"{model.__class__.__name__}.onnx")
-    # wandb.log_artifact(onnx_artifact)

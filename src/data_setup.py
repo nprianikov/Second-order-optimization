@@ -1,6 +1,5 @@
 import sys
-sys.path.append("../Second-order-optimization")
-
+import os
 from typing import Tuple, Any, Union
 
 import pandas as pd
@@ -59,7 +58,8 @@ def train_test_loaders(dataset: str, batch_size=32, slice_size=1.0):
                                       target_transform=None)
         test_data = datasets.CIFAR10(root="datasets", train=False, download=True, transform=ToTensor())
     elif dataset == "tmnist":
-        tmnist_dataset = TMNISTDataset(csv_file="datasets/TMNIST/TMNIST_Data.csv", transform=ToTensor())
+        path = os.path.join(os.getcwd(), '..', 'datasets', 'TMNIST', 'TMNIST_Data.csv')
+        tmnist_dataset = TMNISTDataset(csv_file=path, transform=ToTensor())
         # split the dataset into train and test with a fixed random seed and ratio 5:1
         train_size = int(0.8 * len(tmnist_dataset))
         test_size = len(tmnist_dataset) - train_size

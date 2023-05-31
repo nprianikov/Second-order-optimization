@@ -57,6 +57,7 @@ config = {
     'slice_size': 0.5,
     'activation_fn': "Tanh",
     'dropout': 0.0,
+    'checkpoints': 0,
 }
 
 def wrap_values(config):

@@ -11,20 +11,21 @@ import argparse
 parser = argparse.ArgumentParser(description='Train a model')
 
 # Add the command-line arguments
-parser.add_argument('--loop', default=1, type=int, required=True, help='Loop over all the combinations of the datasets, optimizers and models. 0: Disabled, 1: Enabled')
+parser.add_argument('--loop', default=0, type=int, required=False, help='Loop over all the combinations of the datasets, optimizers and models. 0: Disabled, 1: Enabled')
 parser.add_argument('--epochs', default=1, type=int, required=False, help='Number of epochs to train for')
 parser.add_argument('--lr', default=1e-3, type=float, required=False, help='Learning rate for training')
 parser.add_argument('--batch_size', default=32, type=int, required=False, help='Batch size for training')
 parser.add_argument('--dataset', default="mnist", type=str, required=False, help='Name of the dataset to train on: mnist, tmnist, fashion_mnist, cifar10')
 parser.add_argument('--optimizer', default="SGD", type=str, required=False, help='Name of the optimizer to train: SGD, HessianFree, PB_BFGS, K_BFGS, K_LBFGS')
 parser.add_argument('--model', default="SmallCNN", type=str, required=False, help='Name of the model to train: SmallCNN, DepthCNN, WidthCNN, DepthWidthCNN')
-parser.add_argument('--wandb_mode', default=1, type=int, required=False, help='Wandb mode. 0: Disabled, 1: Online')
-parser.add_argument('--wandb_log', default=0, type=int, required=False, help='Wandb log extra information. 0: All, 1: Gradients, 2: Parameters, 3: None')
+parser.add_argument('--wandb_mode', default=0, type=int, required=False, help='Wandb mode. 0: Disabled, 1: Online')
+parser.add_argument('--wandb_log', default=3, type=int, required=False, help='Wandb log extra information. 0: All, 1: Gradients, 2: Parameters, 3: None')
 parser.add_argument('--wandb_log_freq', default=1, type=int, required=False, help='Wandb log frequency of extra information.')
 parser.add_argument('--wandb_log_batch', default=0, type=int, required=False, help='Wandb log frequency of metrics per training batch. 0 for disabled.')
 parser.add_argument('--data_slice', default=1.0, type=float, required=False, help='Specify the slice of the dataset to use, e.g. 0.5: Half, 1: All')
-parser.add_argument('--activation_fn', default=0, type=str, required=False, help='Activation function to use. 0: Tanh, 1: ReLU, 2: Sigmoid')
+parser.add_argument('--activation_fn', default='Tanh', type=str, required=False, help='Activation function to use. 0: Tanh, 1: ReLU, 2: Sigmoid')
 parser.add_argument('--dropout', default=0.0, type=float, required=False, help='Dropout rate to use. 0.0: Disabled, 0.5: 50%')
+parser.add_argument('--checkpoints', default=0, type=int, required=False, help='Number of model checkpoints to save per epoch.')
 
 
 # Parse the command-line arguments
@@ -74,9 +75,11 @@ config = dict(
         architecture="CNN",
         wandb_log=wandb_logs[args.wandb_log],
         wandb_log_freq=args.wandb_log_freq,
+        wandb_log_batch=args.wandb_log_batch,
         slice_size=args.data_slice,
         activation_fn=args.activation_fn,
         dropout=args.dropout,
+        checkpoints=args.checkpoints,
     )
 
 def wrap_values(config):

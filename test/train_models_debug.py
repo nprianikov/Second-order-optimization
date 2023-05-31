@@ -28,23 +28,23 @@ config = {
     'epochs': 1,
     'learning_rate': 0.001,
     'batch_size': 32,
-    'dataset':  datasets_names[3],
-    'optimizer': optimizers_names[1],
+    'dataset':  datasets_names[0],
+    'optimizer': optimizers_names[0],
     'model': models_names[0],
     'architecture': "CNN",
-    'wandb_log': wandb_logs[0],
-    'wandb_log_freq': 1,
-    'wandb_log_batch': 1,
+    'wandb_log': wandb_logs[3],
+    'wandb_log_freq': 0,
+    'wandb_log_batch': 0,
     'slice_size': 1.0,
     'activation_fn': "Tanh",
     'dropout': 0.0,
+    'checkpoints': 10,
 }
 
 with wandb.init(project="baselines_cnn", config=config, mode=wandb_modes[0]):
     # make the model, data and optimization
     model, train_dataloader, test_dataloader, optimizer, criterion = experiments_maker.make(
-        config, device,
-        damping=1e-2, supress_extremes=0.75, cg_max_iter=50)
+        config, device)
     engine.train(model, train_dataloader, test_dataloader, loss_fn, optimizer, criterion, device, config)
 
 wandb.finish()

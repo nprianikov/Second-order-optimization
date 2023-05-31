@@ -4,9 +4,9 @@ import torch.utils.data
 from torch import nn
 import torchmetrics
 
-import src.data_setup as data_setup
-import src.optimizers.hessianfree as hessianfree
-from src.model_builder import SmallCNN, DepthCNN, WidthCNN, DepthWidthCNN
+import data_setup
+import optimizers.hessianfree as hessianfree
+from model_builder import SmallCNN, DepthCNN, WidthCNN, DepthWidthCNN
 
 
 def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module, torch.utils.data.DataLoader,
