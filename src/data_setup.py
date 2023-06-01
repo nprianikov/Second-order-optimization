@@ -41,7 +41,7 @@ def train_test_loaders(dataset: str, batch_size=32, slice_size=1.0):
     """
     Returns dataloaders for the specified dataset name
     :param dataset: name of the dataset
-    :param batch_size: batch size
+    :param batch_size: batch size. 0 for full batch
     :return: train and test dataloaders
     """
     root_path = os.path.join(os.getcwd(), '..', 'datasets')
@@ -74,8 +74,8 @@ def train_test_loaders(dataset: str, batch_size=32, slice_size=1.0):
         test_data = balanced_slice(test_data, 10, slice_size)
 
     # create dataloaders
-    train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
-    test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False)   
+    train_dataloader = DataLoader(train_data, batch_size=(len(train_data) if batch_size == 0 else batch_size), shuffle=True)
+    test_dataloader = DataLoader(test_data, batch_size=(len(test_data) if batch_size == 0 else batch_size), shuffle=False)   
     
     return train_dataloader, test_dataloader
 

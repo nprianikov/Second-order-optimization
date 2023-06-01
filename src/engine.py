@@ -2,6 +2,7 @@ from timeit import default_timer as timer
 from typing import Tuple
 import os
 
+import json
 import wandb
 import torch
 import torchmetrics
@@ -17,8 +18,8 @@ def train_step(model: torch.nn.Module,
                accuracy_fn: torchmetrics.Metric,
                device: torch.device,
                epoch: int,
-               batch_log = 0,
-               checkpoints = []) -> Tuple[float, float]:
+               config: dict,
+               checkpoints: dict) -> Tuple[float, float]:
     train_loss, train_acc = 0, 0
     batch_counter = 0
     for batch, (X, y) in enumerate(data_loader):
@@ -54,16 +55,13 @@ def train_step(model: torch.nn.Module,
             optimizer.step()
 
         # Log metrics
-        if batch_log > 0 and batch % batch_log == 0:
+        if config["wandb_log_batch"] > 0 and batch % config["wandb_log_batch"] == 0:
             print(f"Batch: {batch_counter}\nLoss: {loss.item()}\nAccuracy: {accuracy_fn(y_pred.argmax(dim=1), y).item()}\n-------")
             wandb.log({"batch_train_loss": loss.item(), "batch_train_accuracy": accuracy_fn(y_pred.argmax(dim=1), y).item()})
         # Log checkpoints
-        if len(checkpoints) > 0 and batch in checkpoints:
-            file = f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}_epoch_{epoch}_batch_{batch}.pth"
-            torch.save(obj=model.state_dict(), f=file)
-            checkpoint_artifact = wandb.Artifact(f"checkpoint-epoch-{epoch}-batch-{batch}-pt", type="model")
-            checkpoint_artifact.add_file(file)
-            wandb.log_artifact(checkpoint_artifact)
+        if len(checkpoints['batches']) > 0 and batch in checkpoints['batches']:
+            file = f"checkpoint_epoch_{epoch}_batch_{batch}.pth"
+            torch.save(obj=model.state_dict(), f=os.path.join(os.getcwd(), '..', 'checkpoints', checkpoints['dir_name'], file))
 
         train_loss += loss.item()
         train_acc += accuracy_fn(y_pred.argmax(dim=1), y).item()
@@ -109,17 +107,30 @@ def train(model: torch.nn.Module,
           config: dict,
           ):
 
-    # create checkpoints
-    checkpoints = []
-    if config["checkpoints"] > 0:
-        step = len(train_data_loader) // config["checkpoints"]
-        checkpoints = [step*i-1 for i in range(1, config["checkpoints"]+1)]
-
+    # init printout
     now = datetime.datetime.now()
     print("-------")
-    print(f"New experiment started at {now.strftime('%Y-%m-%d %H:%M:%S')}\n")
+    print(f"New experiment started at {now.strftime('%Y_%m_%d_%H_%M_%S')}\n")
     print(f"Config: {config}\n")
     print("-------")
+
+    # create checkpoints
+    checkpoints = { "batches": [] }
+    if config["checkpoints"] > 0:
+        # check if directory exists
+        if not os.path.exists("..\checkpoints"):
+            os.makedirs("checkpoints")
+        # create directory
+        dir_name = f"{config['model']}_{config['optimizer']}_{config['dataset']}_{now.strftime('%Y_%m_%d_%H_%M_%S')}"
+        checkpoints["dir_name"] = dir_name
+        if not os.path.exists(f"..\checkpoints\{dir_name}"):
+            os.makedirs(f"..\checkpoints\{dir_name}")
+            # save config
+            with open(f"..\checkpoints\{dir_name}\config.txt", "w") as f:
+                f.write(json.dumps(config))
+        # checkpoint batches
+        step = len(train_data_loader) // config["checkpoints"]
+        checkpoints["batches"] = [step*i-1 for i in range(1, config["checkpoints"]+1)]
 
     # wandb logging extra
     wandb_logs = ["all", "gradients", "parameters", None]
@@ -140,7 +151,7 @@ def train(model: torch.nn.Module,
                                            accuracy_fn=accuracy_fn,
                                            device=device,
                                            epoch=epoch,
-                                           batch_log=config["wandb_log_batch"],
+                                           config=config,
                                            checkpoints = checkpoints)
         train_time_end = timer()
         total_train_time_model = train_time_end - train_time_start
