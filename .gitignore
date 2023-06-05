@@ -18,6 +18,7 @@ toy_problems/himmelblau.ipynb
 
 checkpoints
 *.pth
+test/HF
 
 # dont exclude jupyter/training_models.ipynb from git
 !jupyter/training_models.ipynb
