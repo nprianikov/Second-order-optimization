@@ -41,6 +41,7 @@ def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module,
     # choose criterion
     n_classes = 10 # all datasets considered have 10 classes
     criterion = torchmetrics.Accuracy(task='multiclass', num_classes=n_classes, average='macro')
+    criterion.to(device)
     
     # choose optimizer
     if config["optimizer"] == "SGD":

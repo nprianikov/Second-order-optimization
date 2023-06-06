@@ -25,11 +25,11 @@ class HessianFree(torch.optim.Optimizer):
     """
 
     def __init__(self, params, 
-                 lr=1, 
+                 lr=0.1, 
                  damping=1e-2, 
                  supress_extremes=0.75, 
                  delta_decay=0.95, 
-                 cg_max_iter=50, 
+                 cg_max_iter=100, 
                  use_gnm=True,
                  verbose=False):
 
@@ -147,7 +147,7 @@ class HessianFree(torch.optim.Optimizer):
         # Update parameters
         delta = state['init_delta'] = deltas[-1]
         M = Ms[-1]
-
+        
         vector_to_parameters(flat_params + delta, self._params)
         loss_now = closure()[0]
         current_evals += 1
@@ -197,7 +197,7 @@ class HessianFree(torch.optim.Optimizer):
             alpha = 0.0
             loss_now = loss_before
 
-        # Update the parameters (this time fo real)
+        # Update the parameters (this time for real)
         vector_to_parameters(flat_params + alpha * delta, self._params)
 
         if verbose:

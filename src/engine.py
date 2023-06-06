@@ -38,7 +38,7 @@ def train_step(model: torch.nn.Module,
                 return empirical_fisher_diagonal_batched(model, X, y, loss_fn)
 
             optimizer.zero_grad()
-            loss, y_pred = optimizer.step(closure=closure, M_inv=M_inv) # type: ignore
+            loss, y_pred = optimizer.step(closure=closure, M_inv=None) # type: ignore
 
             # clear gradients due to create_graph=True
             for param in model.parameters():
@@ -118,15 +118,15 @@ def train(model: torch.nn.Module,
     checkpoints = { "batches": [] }
     if config["checkpoints"] > 0:
         # check if directory exists
-        if not os.path.exists("..\checkpoints"):
-            os.makedirs("checkpoints")
+        if not os.path.exists(os.path.join(os.getcwd(), '..', 'checkpoints')):
+            os.makedirs("checkpoints", exist_ok=True)
         # create directory
         dir_name = f"{config['model']}_{config['optimizer']}_{config['dataset']}_{now.strftime('%Y_%m_%d_%H_%M_%S')}"
         checkpoints["dir_name"] = dir_name
-        if not os.path.exists(f"..\checkpoints\{dir_name}"):
-            os.makedirs(f"..\checkpoints\{dir_name}")
+        if not os.path.exists(os.path.join(os.getcwd(), '..', 'checkpoints', dir_name)):
+            os.makedirs(os.path.join(os.getcwd(), '..', 'checkpoints', dir_name), exist_ok=True)
             # save config
-            with open(f"..\checkpoints\{dir_name}\config.txt", "w") as f:
+            with open(os.path.join(os.getcwd(), '..', 'checkpoints', dir_name, 'config.txt'), "w") as f:
                 f.write(json.dumps(config))
         # checkpoint batches
         step = len(train_data_loader) // config["checkpoints"]

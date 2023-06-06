@@ -22,7 +22,12 @@ def main():
     print(main_config)
     model, train_dataloader, test_dataloader, optimizer, criterion = experiments_maker.make(
         main_config, cm.device, 
-        damping=main_config.damping, supress_extremes=main_config.supress_extremes, cg_max_iter=main_config.cg_max_iter)
+        # damping=main_config.damping, 
+        # supress_extremes=main_config.supress_extremes, 
+        lr=main_config.lr,
+        delta_decay=main_config.delta_decay,
+        cg_max_iter=main_config.cg_max_iter
+    )
     engine.train(model, train_dataloader, test_dataloader, cm.loss_fn, optimizer, criterion, cm.device, main_config)
 
 
@@ -33,13 +38,26 @@ sweep_config = {
         'name': 'train_loss'
     },
     'parameters': {
-        'damping': {'min': 0.5, 'max': 0.95},
-        'supress_extremes': {'min': 0.65, 'max': 0.95},
-        'cg_max_iter': {'values': [100, 200, 300, 400, 500]}
+        'delta_decay': {'values': [0.85, 0.90, 0.95, 0.99]},
+        'cg_max_iter': {'values': [25, 50, 75, 100]},
+        'lr': {'values': [0.1, 0.25, 0.5, 1.0]}
     }
 }
 
-config = cm.create_config(vars(args))
+# 'parameters': {
+#         'damping': {'values':{[1e-2, 1e-1, 0.25, 0.50]}},           - used for preconditioner
+#         'supress_extremes': {'values':{[0.65, 0.75, 0.85, 0.95]}},  - used for preconditioner
+#         'delta_decay': {'values': {[0.85, 0.90, 0.95, 0.99]}},
+#         'cg_max_iter': {'values': {[25, 50, 75, 100]}},
+#         'lr': {'values': [0.1, 0.25, 0.5, 1.0]}
+#     }
+
+config = cm.create_config(vars(args),
+                          epochs=5,
+                          dataset=cm.datasets_names[0],
+                          optimizer=cm.optimizers_names[1],
+                          model=cm.models_names[0],
+                          wandb_log_batch=50)
 
 def wrap_values(config):
     return {key: {'value': value} for key, value in config.items()}
