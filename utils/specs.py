@@ -132,14 +132,24 @@ class CheckpointSpecs:
         # ax.get_proj = lambda: np.dot(Axes3D.get_proj(ax), np.diag([1, 1, 0.6, 1]))
 
 
-    def get_flat_params(self, model):
+    def get_flat_params(self):
+        model = self.copy_model()
         params = [p.data.cpu().numpy().flatten() for _, p in model.named_parameters()]
         names = [n for n, _ in model.named_parameters()]
         result = zip(names, params)
         return result
     
 
-    def get_flat_grad(self, model):
+    def compute_grads(self, full_dataset=False):
+        if full_dataset:
+            loss = self.empirical_loss(self._model)
+        else:
+            loss = cm.loss_fn(self._model(self._inputs), self._targets)
+        loss.backward()
+
+
+    def get_flat_grad(self):
+        model = self.copy_model()
         grads = [p.grad.data.cpu().numpy().flatten() for _, p in model.named_parameters()]
         names = [n for n, _ in model.named_parameters()]
         result = zip(names, grads)
@@ -243,63 +253,47 @@ class CheckpointSpecs:
 
 
     def params_hist(self, bins=100, **kwargs):
-        model = self.copy_model()
-        self.combined_hists(self.get_flat_params(model), title=self._file_name, xlabel='Parameters', bins=bins, **kwargs)
+        self.combined_hists(self.get_flat_params(), title=self._file_name, xlabel='Parameters', bins=bins, **kwargs)
 
 
     def params_log_density(self, bins=1000, **kwargs):
-        model = self.copy_model()
-        self.combined_log_density(self.get_flat_params(model), title=self._file_name, xlabel='Parameters', bins=bins, **kwargs)
+        self.combined_log_density(self.get_flat_params(), title=self._file_name, xlabel='Parameters', bins=bins, **kwargs)
 
 
     def full_params_hist(self, bins=100, **kwargs):
-        model = self.copy_model()
-        self.full_hist(self.get_flat_params(model), title=self._file_name, xlabel='Parameters', bins=bins, **kwargs)
+        self.full_hist(self.get_flat_params(), title=self._file_name, xlabel='Parameters', bins=bins, **kwargs)
 
     
     def full_params_log_density(self, bins=1000, **kwargs):
-        model = self.copy_model()
-        self.full_log_density(self.get_flat_params(model), title=self._file_name, xlabel='Parameters', bins=bins, **kwargs)
+        self.full_log_density(self.get_flat_params(), title=self._file_name, xlabel='Parameters', bins=bins, **kwargs)
 
 
-    def grads_hist(self, bins=100, full_dataset=False, **kwargs):
-        model = self.copy_model()
-        if full_dataset:
-            loss = self.empirical_loss(model)
-        else:
-            loss = cm.loss_fn(model(self._inputs), self._targets)
-        loss.backward()
-        self.combined_hists(self.get_flat_grad(model), title=self._file_name, xlabel='Gradients', bins=bins, **kwargs)
+    def grads_hist(self, bins=100, **kwargs):
+        '''
+        Requires a model with gradients computed
+        '''
+        self.combined_hists(self.get_flat_grad(), title=self._file_name, xlabel='Gradients', bins=bins, **kwargs)
 
 
-    def grads_log_density(self, bins=1000, full_dataset=False, **kwargs):
-        model = self.copy_model()
-        if full_dataset:
-            loss = self.empirical_loss(model)
-        else:
-            loss = cm.loss_fn(model(self._inputs), self._targets)
-        loss.backward()
-        self.combined_log_density(self.get_flat_grad(model), title=self._file_name, xlabel='Gradients', bins=bins, **kwargs)
+    def grads_log_density(self, bins=1000, **kwargs):
+        '''
+        Requires a model with gradients computed
+        '''
+        self.combined_log_density(self.get_flat_grad(), title=self._file_name, xlabel='Gradients', bins=bins, **kwargs)
 
 
-    def full_grads_hist(self, bins=100, full_dataset=False, **kwargs):
-        model = self.copy_model()
-        if full_dataset:
-            loss = self.empirical_loss(model)
-        else:
-            loss = cm.loss_fn(model(self._inputs), self._targets)
-        loss.backward()
-        self.full_hist(self.get_flat_grad(model), title=self._file_name, xlabel='Gradients', bins=bins, **kwargs)
+    def full_grads_hist(self, bins=100, **kwargs):
+        '''
+        Requires a model with gradients computed
+        '''
+        self.full_hist(self.get_flat_grad(), title=self._file_name, xlabel='Gradients', bins=bins, **kwargs)
 
 
-    def full_grads_log_density(self, bins=1000, full_dataset=False, **kwargs):
-        model = self.copy_model()
-        if full_dataset:
-            loss = self.empirical_loss(model)
-        else:
-            loss = cm.loss_fn(model(self._inputs), self._targets)
-        loss.backward()
-        self.full_log_density(self.get_flat_grad(model), title=self._file_name, xlabel='Gradients', bins=bins, **kwargs)
+    def full_grads_log_density(self, bins=1000, **kwargs):
+        '''
+        Requires a model with gradients computed
+        '''
+        self.full_log_density(self.get_flat_grad(), title=self._file_name, xlabel='Gradients', bins=bins, **kwargs)
 
  
     def top_eig_perb_plot(self, radius=5e-1, n=21, **kwargs):
@@ -353,3 +347,50 @@ class CheckpointSpecs:
         save_path = f"hessian_esd_plot_{self._file_name}.png" if save else None
         get_esd_plot(density_eigen, density_weight, save_path=save_path, **kwargs)
 
+
+    def layer_params_plot(self, **kwargs):
+        '''
+        Requires precomputed gradients
+        '''
+        model = self._model
+        #
+        def add_id_to_lists(A, B, x, s):
+            C = []
+            for i in range(len(A)):
+                C.append([A[i], B[i], x, s])
+            return C
+        #
+        ns = []
+        vars = []
+        parameter_position_pairs = []
+        for param_idx, (name, param) in enumerate(model.named_parameters()):
+            params = list(param.data.cpu().numpy().flatten())
+            gradients = list(param.grad.data.cpu().numpy().flatten())
+            scaler = np.var(params)
+            ns.append(name)
+            vars.append(scaler)
+            id_patams = add_id_to_lists(params, gradients, param_idx, scaler)
+            parameter_position_pairs.extend(id_patams)
+        #
+        min_marker_size = 5
+        max_marker_size = 30
+        #
+        xs = [x[2] for x in parameter_position_pairs]
+        ys = [x[0] for x in parameter_position_pairs]
+        zs = [x[1] for x in parameter_position_pairs]
+        vs = [x[3] for x in parameter_position_pairs]
+        marker_sizes = min_marker_size + (max_marker_size - min_marker_size) * (vs - np.min(vars)) / (np.max(vars) - np.min(vars))
+        #
+        jitter_amount = 0.3
+        x_jitter = np.random.uniform(-jitter_amount, jitter_amount, len(xs))
+        # 
+        plt.scatter(x=xs+x_jitter, y=ys, s=marker_sizes, vmin=np.min(zs), vmax=np.max(zs), alpha=0.5, c=zs, cmap='seismic')
+        plt.ylabel('Parameter values')
+        plt.xlabel('Layer')
+        plt.title(f'Parameters per layer: stratified by gradient values')
+        plt.xticks(list(range(0, len(ns))), ns, rotation=60)
+        plt.tick_params(axis='x', which='major', labelsize=8)
+        plt.colorbar()
+        plt.savefig(f"layer_params_{self._file_name}.png")
+        plt.show()
+        

@@ -9,13 +9,10 @@ class SmallCNN(nn.Module):
         # factory
         self.lfc = LayersFactory(input_shape, output_shape, p, dataset)
         # unique
-        self.activation_fn = activation_fn()
         self.convIn_32 = self.lfc.create_layer('convIn_32')
-        self.flatten = self.lfc.create_layer('flatten')
-        self.fcSmall = self.lfc.create_layer('fcSmall')
-        self.fc64_Out = self.lfc.create_layer('fc64_Out')
         self.pool = self.lfc.create_layer('pool')
         self.dropout = self.lfc.create_layer('dropout')
+        self.activation_fn = activation_fn()
 
         self.conv1 = nn.Sequential(
             self.convIn_32,
@@ -34,6 +31,10 @@ class SmallCNN(nn.Module):
             self.activation_fn,
             self.pool,
         )
+
+        self.flatten = self.lfc.create_layer('flatten')
+        self.fcSmall = self.lfc.create_layer('fcSmall')
+        self.fc64_Out = self.lfc.create_layer('fc64_Out')
 
         self.out = nn.Sequential(
             self.flatten,
@@ -57,11 +58,8 @@ class DepthCNN(nn.Module):
         # factory
         self.lfc = LayersFactory(input_shape, output_shape, p, dataset)
         # unique
-        self.activation_fn = activation_fn()
         self.convIn_32 = self.lfc.create_layer('convIn_32')
-        self.flatten = self.lfc.create_layer('flatten')
-        self.fcDepth = self.lfc.create_layer('fcDepth')
-        self.fc64_Out = self.lfc.create_layer('fc64_Out')
+        self.activation_fn = activation_fn()
         self.pool = self.lfc.create_layer('pool')
         self.dropout = self.lfc.create_layer('dropout')
 
@@ -104,6 +102,10 @@ class DepthCNN(nn.Module):
             self.pool,
         )
 
+        self.flatten = self.lfc.create_layer('flatten')
+        self.fcDepth = self.lfc.create_layer('fcDepth')
+        self.fc64_Out = self.lfc.create_layer('fc64_Out')
+
         self.out = nn.Sequential(
             self.flatten,
             self.fcDepth,
@@ -129,11 +131,8 @@ class WidthCNN(nn.Module):
         # factory
         self.lfc = LayersFactory(input_shape, output_shape, p, dataset)
         # unique
-        self.activation_fn = activation_fn()
         self.convIn_64 = self.lfc.create_layer('convIn_64')
-        self.flatten = self.lfc.create_layer('flatten')
-        self.fcWidth = self.lfc.create_layer('fcWidth')
-        self.fc128_Out = self.lfc.create_layer('fc128_Out')
+        self.activation_fn = activation_fn()
         self.pool = self.lfc.create_layer('pool')
         self.dropout = self.lfc.create_layer('dropout')
 
@@ -158,6 +157,10 @@ class WidthCNN(nn.Module):
             self.pool,
         )
 
+        self.flatten = self.lfc.create_layer('flatten')
+        self.fcWidth = self.lfc.create_layer('fcWidth')
+        self.fc128_Out = self.lfc.create_layer('fc128_Out')
+
         self.out = nn.Sequential(
             self.flatten,
             self.fcWidth,
@@ -180,11 +183,8 @@ class DepthWidthCNN(nn.Module):
         # factory
         self.lfc = LayersFactory(input_shape, output_shape, p, dataset)
         # unique
-        self.activation_fn = activation_fn()
         self.convIn_64 = self.lfc.create_layer('convIn_64')
-        self.flatten = self.lfc.create_layer('flatten')
-        self.fcDepthWidth = self.lfc.create_layer('fcDepthWidth')
-        self.fc128_Out = self.lfc.create_layer('fc128_Out')
+        self.activation_fn = activation_fn()
         self.pool = self.lfc.create_layer('pool')
         self.dropout = self.lfc.create_layer('dropout')
 
@@ -226,6 +226,10 @@ class DepthWidthCNN(nn.Module):
             self.dropout,
             self.pool,
         )
+
+        self.flatten = self.lfc.create_layer('flatten')
+        self.fcDepthWidth = self.lfc.create_layer('fcDepthWidth')
+        self.fc128_Out = self.lfc.create_layer('fc128_Out')
 
         self.out = nn.Sequential(
             self.flatten,
