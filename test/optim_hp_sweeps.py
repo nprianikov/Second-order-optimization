@@ -24,7 +24,7 @@ def main():
         main_config, cm.device, 
         # damping=main_config.damping, 
         # supress_extremes=main_config.supress_extremes, 
-        lr=main_config.lr,
+        lr=main_config.alpha,
         delta_decay=main_config.delta_decay,
         cg_max_iter=main_config.cg_max_iter
     )
@@ -40,7 +40,7 @@ sweep_config = {
     'parameters': {
         'delta_decay': {'values': [0.85, 0.90, 0.95, 0.99]},
         'cg_max_iter': {'values': [25, 50, 75, 100]},
-        'lr': {'values': [0.1, 0.25, 0.5, 1.0]}
+        'alpha': {'values': [0.001, 0.01, 0.1, 1.0]}
     }
 }
 
@@ -54,6 +54,7 @@ sweep_config = {
 
 config = cm.create_config(vars(args),
                           epochs=5,
+                          batch_size=128,
                           dataset=cm.datasets_names[0],
                           optimizer=cm.optimizers_names[1],
                           model=cm.models_names[0],

@@ -25,7 +25,7 @@ class HessianFree(torch.optim.Optimizer):
     """
 
     def __init__(self, params, 
-                 lr=0.1, 
+                 lr=1.0, 
                  damping=1e-2, 
                  supress_extremes=0.75, 
                  delta_decay=0.95, 
@@ -182,11 +182,11 @@ class HessianFree(torch.optim.Optimizer):
             group['init_delta'] = 0
 
         # Line Searching (Section 20.8.8)
-        beta = 0.8
+        beta = 0.1
         c = 1e-2
         min_improv = min(c * torch.dot(b, delta), 0)
 
-        for _ in range(60):
+        for _ in range(100):
             if float(loss_now) <= float(loss_before) + alpha * min_improv:
                 break
 
@@ -311,7 +311,7 @@ class HessianFree(torch.optim.Optimizer):
             ws = torch.zeros_like(y, requires_grad=True)
 
         jacobian = torch.autograd.grad(
-            y, x, grad_outputs=ws, create_graph=True)
+            y, x, grad_outputs=ws, create_graph=True) 
 
         Jv = torch.autograd.grad(parameters_to_vector(
             jacobian), ws, grad_outputs=v, create_graph=create_graph)

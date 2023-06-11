@@ -22,6 +22,7 @@ def train_step(model: torch.nn.Module,
                checkpoints: dict) -> Tuple[float, float]:
     train_loss, train_acc = 0, 0
     batch_counter = 0
+    N = len(data_loader)
     for batch, (X, y) in enumerate(data_loader):
         # Send data to GPU
         X, y = X.to(device), y.to(device)
@@ -31,7 +32,7 @@ def train_step(model: torch.nn.Module,
             def closure():
                 _y_pred = model(X)
                 _loss = loss_fn(_y_pred, y)
-                _loss.backward(create_graph=True)
+                _loss.backward(create_graph=False, retain_graph=True)
                 return _loss, _y_pred
             
             def M_inv():  # inverse preconditioner
@@ -56,7 +57,7 @@ def train_step(model: torch.nn.Module,
 
         # Log metrics
         if config["wandb_log_batch"] > 0 and batch % config["wandb_log_batch"] == 0:
-            print(f"Batch: {batch_counter}\nLoss: {loss.item()}\nAccuracy: {accuracy_fn(y_pred.argmax(dim=1), y).item()}\n-------")
+            print(f"Batch: {batch_counter}/{N}\nLoss: {loss.item()}\nAccuracy: {accuracy_fn(y_pred.argmax(dim=1), y).item()}\n-------")
             wandb.log({"batch_train_loss": loss.item(), "batch_train_accuracy": accuracy_fn(y_pred.argmax(dim=1), y).item()})
         # Log checkpoints
         if len(checkpoints['batches']) > 0 and batch in checkpoints['batches']:

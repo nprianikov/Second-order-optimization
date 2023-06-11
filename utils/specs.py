@@ -12,35 +12,50 @@ from utils.density_plot import get_esd_plot # ESD computation
 import src.experiments_maker as experiments_maker
 import src.engine as engine
 import utils.config_manager as cm
-from pyhessian.utils import normalization
+from utils.pyhessian.utils import normalization
 
 import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 
 
 class CheckpointSpecs:
-    def __init__(self, f, full_dataset=False, **kwargs):
+    def __init__(self, f, full_dataset=False, pref=None, **kwargs):
         self._f = f
-        self._file_name = self._f.split('\\')[-1].split('.')[0]
+        self._file_name = self._f.split('/')[-1].split('.')[0]
+        if pref is not None:
+            self._file_name = pref + '_' + '_'.join(self._file_name.split('_')[1:])
         self._full_dataset = full_dataset
         # read the dict from txt file
-        config_path = os.path.join(f, '..', 'config.txt')
-        with open(config_path) as file:
+        # config_path = os.path.join(f, '..', 'config.txt')
+        config_path = '/'.join(f.split('/')[:-1]) + '/config.txt'
+        with open(config_path, 'r') as file:
             data = file.read()
         self._config = json.loads(data)
-
+        #self._config['batch_size'] = 32
+        torch.cuda.empty_cache()
         self._model, self._train_data_loader, self._test_data_loader, self._optimizer, self._accuracy_fn = experiments_maker.make(self._config, cm.device, **kwargs)
-        self._model.load_state_dict(torch.load(f))
+        self._model.load_state_dict(torch.load(f))#, map_location=cm.device))
         self._model.eval()
 
         self._cuda = True if cm.device == torch.device('cuda') else False
+        self._cuda = True
+        # for batch, (X, y) in enumerate(self._train_data_loader):
+        #    # Send data to GPU
+        #    X, y = X.to(cm.device), y.to(cm.device)
+        #
+        #for batch, (X, y) in enumerate(self._train_data_loader):
+        #    # Send data to GPU
+        #    X, y = X.to(cm.device), y.to(cm.device)
         
         self._inputs, self._targets = next(iter(self._train_data_loader))
+        self._inputs = self._inputs.to(cm.device)
+        self._targets = self._targets.to(cm.device)
         if full_dataset:
             self.hessian_comp = hessian(self._model, cm.loss_fn, dataloader=self._train_data_loader, cuda=self._cuda)
         else:
             self.hessian_comp = hessian(self._model, cm.loss_fn, data=(self._inputs, self._targets), cuda=self._cuda)
         self.top_eigenvalues, self.top_eigenvector = self.hessian_comp.eigenvalues(maxIter=100, tol=1e-2, top_n=2)
+        self.trace = self.hessian_comp.trace()
 
 
     def copy_model(self):
@@ -67,17 +82,39 @@ class CheckpointSpecs:
         return model_perb
 
 
-    def empirical_loss(self, model, slice_size=0.25):
-        total_loss = 0
-        slice_len = int(len(self._train_data_loader) * slice_size)
-        for count, (inputs, targets) in enumerate(self._train_data_loader):
+    def empirical_test_loss(self, model, slice_size=0.25):
+        test_loss = 0
+        test_acc = 0
+        slice_len = int(len(self._test_data_loader) * slice_size)
+        for count, (inputs, targets) in enumerate(self._test_data_loader):
             if count >= slice_len:
                 break
             outputs = model(inputs)
             loss = cm.loss_fn(outputs, targets)
-            total_loss += loss
-        return total_loss / len(self._train_data_loader)
+            test_loss += loss
+            test_acc += self._accuracy_fn(outputs.argmax(dim=1), targets).item()
+        test_loss = test_loss / len(slice_len)
+        test_acc = test_acc / len(slice_len)
+        return test_loss, test_acc
 
+
+    def empirical_train_loss(self, model, slice_size=0.25):
+        train_loss = 0
+        train_acc = 0
+        slice_len = int(len(self._train_data_loader) * slice_size)
+        for count, (inputs, targets) in enumerate(self._train_data_loader):
+            if count >= slice_len:
+                break
+            inputs = inputs.to(cm.device)
+            targets = targets.to(cm.device)
+            outputs = model(inputs)
+            loss = cm.loss_fn(outputs, targets)
+            train_loss += loss
+            train_acc += self._accuracy_fn(outputs.argmax(dim=1), targets).item()
+            #print(f'count: {count}, loss: {loss}')
+        train_loss = train_loss / len(slice_len)
+        train_acc = train_acc / len(slice_len)
+        return train_loss, train_acc
 
     def perb_loss_1d(self, direction, radius=5e-1, n=21, **kwargs):
         lams = np.linspace(-radius, radius, n).astype(np.float32)
@@ -86,7 +123,7 @@ class CheckpointSpecs:
         for lam in lams:
             model_perb = self.perb_params_1d(self._model, model_perb, direction, lam)
             if self._full_dataset:
-                loss = self.empirical_loss(model_perb)
+                loss, _ = self.empirical_train_loss(model_perb)
             else:
                 loss = cm.loss_fn(model_perb(self._inputs), self._targets).item() 
             loss_list.append(loss)
@@ -115,7 +152,7 @@ class CheckpointSpecs:
             for j in range(len(alphas[1])):
                 model_perb = self.perb_params_2d(self._model, model_perb, directions=directions, alphas=[alphas[0][i][j], alphas[1][i][j]])
                 if self._full_dataset:
-                    loss = self.empirical_loss(model_perb)
+                    loss, _ = self.empirical_train_loss(model_perb)
                 else:
                     loss = cm.loss_fn(model_perb(self._inputs), self._targets).item() 
                 loss_list.append(loss)
@@ -142,7 +179,7 @@ class CheckpointSpecs:
 
     def compute_grads(self, full_dataset=False):
         if full_dataset:
-            loss = self.empirical_loss(self._model)
+            loss, _ = self.empirical_train_loss(self._model)
         else:
             loss = cm.loss_fn(self._model(self._inputs), self._targets)
         loss.backward()
@@ -326,7 +363,7 @@ class CheckpointSpecs:
     def grad_perb_plot(self, radius=5e-1, n=21, **kwargs):
         model_perb = self.copy_model()
         if self._full_dataset:
-            loss = self.empirical_loss(model_perb)
+            loss, _ = self.empirical_train_loss(model_perb)
         else:
             loss = cm.loss_fn(model_perb(self._inputs), self._targets)
         loss.backward()
@@ -341,6 +378,7 @@ class CheckpointSpecs:
 
 
     def hessian_esd_plot(self, save=False, **kwargs):
+        plt.clf()
         trace = self.hessian_comp.trace()
         print("The trace of this model is: %.4f"%(np.mean(trace)))
         density_eigen, density_weight = self.hessian_comp.density() 
@@ -391,6 +429,6 @@ class CheckpointSpecs:
         plt.xticks(list(range(0, len(ns))), ns, rotation=60)
         plt.tick_params(axis='x', which='major', labelsize=8)
         plt.colorbar()
+        plt.tight_layout()
         plt.savefig(f"layer_params_{self._file_name}.png")
         plt.show()
-        

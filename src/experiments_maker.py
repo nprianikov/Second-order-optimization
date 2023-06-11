@@ -8,7 +8,7 @@ import numpy as np
 import src.data_setup as data_setup
 import src.optimizers.hessianfree as hessianfree
 from src.model_builder import SmallCNN, DepthCNN, WidthCNN, DepthWidthCNN
-
+import utils.config_manager as cm
 
 def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module, torch.utils.data.DataLoader,
                                                       torch.utils.data.DataLoader, torch.optim.Optimizer, torchmetrics.Accuracy]:
@@ -20,9 +20,9 @@ def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module,
         **kwargs: additional arguments for the specific optimizer
     """
     # set the seed for reproducibility
-    np.random.seed(42)
-    torch.manual_seed(42)
-    torch.cuda.manual_seed(42)
+    np.random.seed(cm.random_seeds[0])
+    torch.manual_seed(cm.random_seeds[0])
+    torch.cuda.manual_seed(cm.random_seeds[0])
     
     # choose model
     activation_fn_dict = {"tanh": nn.Tanh, "relu":nn.ReLU, 'sigmoid': nn.Sigmoid}
@@ -32,6 +32,7 @@ def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module,
         activation_fn=activation_fn_dict[config["activation_fn"].lower()], 
         p=config["dropout"],
         dataset=config["dataset"]).to(device)
+   
     
     # load data
     train_data_loader, test_data_loader = data_setup.train_test_loaders(dataset=config['dataset'],

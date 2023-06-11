@@ -31,10 +31,10 @@ if args.loop == 1:
                               dataset=cm.datasets_names,
                               optimizer=cm.optimizers_names[0],
                               model=cm.models_names,
-                              wandb_log=1,
-                              wandb_log_freq=1000,
-                              wandb_log_batch=1000,
-                              activation_fn=["Tanh", "ReLU"],)
+                              wandb_log_freq=0,
+                              wandb_log_batch=32,
+                              batch_size=128,
+                              checkpoints=10)
     # update sweep config
     sweep_config['parameters'].update(cm.wrap_values(config))
     # init sweep
