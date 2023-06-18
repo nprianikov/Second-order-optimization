@@ -24,7 +24,7 @@ ARG_DEFS = {
 wandb_modes = ["disabled", "online"]
 device = "cuda" if torch.cuda.is_available() else "cpu"
 loss_fn = nn.CrossEntropyLoss()
-random_seeds = [42, 47, 68, 27, ]
+random_seeds = [42, 47, 68, 27, 24]
 
 datasets_names = ['mnist', 'tmnist','fashion_mnist', 'cifar10']
 optimizers_names = ['SGD', 'HessianFree', 'PB_BFGS', 'K_BFGS', 'K_LBFGS']

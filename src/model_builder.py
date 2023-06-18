@@ -20,17 +20,9 @@ class SmallCNN(nn.Module):
             self.pool,
         )
 
-        self.conv2 = nn.Sequential(
-            self.lfc.create_layer('conv32_32'),
-            self.activation_fn,
-            self.pool,
-        )
-
-        self.conv3 = nn.Sequential(
-            self.lfc.create_layer('conv32_64'),
-            self.activation_fn,
-            self.pool,
-        )
+        self.conv2 = self.lfc.create_layer('conv32_32')
+            
+        self.conv3 = self.lfc.create_layer('conv32_64')
 
         self.flatten = self.lfc.create_layer('flatten')
         self.fcSmall = self.lfc.create_layer('fcSmall')
@@ -45,11 +37,49 @@ class SmallCNN(nn.Module):
         )
         
     def forward(self, x):
-        x = self.conv1(x)
+        """
+        Forward pass through model
+        Returns:
+        - x: outputs scores from final layer
+        - a: outputs of layers (pre-activation)
+        - h: inputs of layers
+        """
+        # TODO: append to h before or after pooling layer? + flattening
+
+        a = [] 
+        h = []
+
+        # layer 1
+        h.append(x)
+        x = self.convIn_32(x)
+        a.append(x)
+        x = self.activation_fn(x)
+        # layer 2
+        h.append(x)
+        x = self.pool(x)
         x = self.conv2(x)
+        a.append(x)
+        x = self.activation_fn(x)
+        # layer 3
+        h.append(x)
+        x = self.pool(x)
         x = self.conv3(x)
-        x = self.out(x)
-        return x
+        a.append(x)
+        x = self.activation_fn(x)
+        # layer 4
+        h.append(x)
+        x = self.pool(x)
+        x = self.flatten(x)
+        x = self.fcSmall(x)
+        a.append(x)
+        x = self.activation_fn(x)
+        # layer 5
+        h.append(x)
+        x = self.dropout(x)
+        x = self.fc64_Out(x)
+        a.append(x)
+
+        return x, a, h
 
 
 class DepthCNN(nn.Module):

@@ -4,6 +4,8 @@ import torch.utils.data
 from torch import nn
 import torchmetrics
 import numpy as np
+from src.optimizers.s_bfgs import LBFGS, FullBatchLBFGS
+from src.optimizers.k_bfgs import K_BFGS
 
 import src.data_setup as data_setup
 import src.optimizers.hessianfree as hessianfree
@@ -50,17 +52,13 @@ def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module,
     elif config["optimizer"] == "HessianFree":
         optimizer = hessianfree.HessianFree(params=model.parameters(), **kwargs)
     elif config["optimizer"] == "PB_BFGS":
-        # TODO: add PB_BFGS
-        pass
+        optimizer = LBFGS(model.parameters(), lr=1., history_size=10, line_search='Wolfe', debug=True)
     elif config["optimizer"] == "K_BFGS":
-        # TODO: add K_BFGS
-        pass
+        optimizer = K_BFGS(model.parameters(), algorithm='K-BFGS', lr=0.3, lambda_damping=0.3, verbose=True)
+        optimizer.optimizer_initialization(model=model, train_dataset=train_data_loader, batch_size=config['batch_size'])
     elif config["optimizer"] == "K_LBFGS":
-        # TODO: add K_LBFGS
-        pass
-    elif config["optimizer"] == "K_FAC":
-        #TODO add K_FAC
-        pass
+        optimizer = K_BFGS(model.parameters(), algorithm='K-BFGS(L)', lr=0.3, lambda_damping=0.3, verbose=True)
+        optimizer.optimizer_initialization(model=model, train_dataset=train_data_loader, batch_size=config['batch_size'])
     else:
         raise ValueError("Unknown optimizer type")
 

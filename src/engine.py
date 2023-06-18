@@ -9,6 +9,7 @@ import torchmetrics
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 import datetime
+import numpy as np
 from src.optimizers.hessianfree import empirical_fisher_diagonal_batched
 
 def train_step(model: torch.nn.Module,
@@ -44,6 +45,73 @@ def train_step(model: torch.nn.Module,
             # clear gradients due to create_graph=True
             for param in model.parameters():
                 param.grad = None
+
+        elif optimizer.__class__.__name__ == "S_BFGS":
+
+            # compute initial gradient and objective
+            # TODO: implement analgus method
+            grad, obj = get_grad(optimizer, X_train[Sk], y_train[Sk], opfun)
+    
+            # two-loop recursion to compute search direction
+            p = optimizer.two_loop_recursion(-grad)
+            
+            # define closure for line search
+            def closure():
+                optimizer.zero_grad()
+                _loss = torch.tensor(0, dtype=torch.float).to(device)
+                _y_pred = model(X)
+                _loss = loss_fn(_y_pred, y)
+                return _loss
+            
+            # perform line search step
+            options = {'closure': closure, 'current_loss': obj}
+            obj, grad, lr, _, _, _, _, _ = optimizer.step(p, grad, options=options)
+        
+            # curvature update
+            optimizer.curvature_update(grad)
+
+        elif optimizer.__class__.__name__ == "K_BFGS":
+            # Forward
+            z, a, h = model.forward(X)
+            loss = loss_fn(z, y)
+            # backward and gradient
+            model.zero_grad()
+            loss.backward()
+
+            model_grad_torch = get_model_grad(model, params) # TODO: implement analogus
+            model_grad_torch = get_plus_torch(model_grad_torch,get_multiply_scalar_no_grad(params['tau'], model.layers_weight))
+            data_['model_grad_torch'] = model_grad_torch
+
+            if get_if_nan(model_grad_torch):
+                print('Error: nan in model_grad_torch')
+                break
+
+            rho = params['momentum_gradient_rho']
+            data_['model_grad_momentum'] = get_plus_torch(get_multiply_scalar(rho, data_['model_grad_momentum']),get_multiply_scalar(1 - rho, model_grad_torch))
+            data_['model_grad_used_torch'] = data_['model_grad_momentum']
+
+            # get second order caches
+            data_['X_mb'] = X
+            data_['t_mb'] = y
+
+            data_ = get_second_order_caches(z, a, h, data_, params)
+
+            model = data_['model']
+            algorithm = params['algorithm']
+
+            data_, params = Kron_BFGS_update(data_, params)
+
+            p_torch = data_['p_torch']
+
+            if get_if_nan(p_torch):
+                print('Error: nan in p_torch')
+                break
+
+            model = update_parameter(p_torch, model, params)
+
+            if get_if_nan(model.layers_weight):
+                print('Error: nan in model.layers_weight')
+                break
         else:
             # Forward pass
             y_pred = model(X)
