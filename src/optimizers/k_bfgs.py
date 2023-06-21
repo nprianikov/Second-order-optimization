@@ -4,219 +4,177 @@ import torch.nn.functional as F
 import copy 
 from torch.nn.utils.convert_parameters import vector_to_parameters, parameters_to_vector
 
-from k_bfgs_utils import *
-from utils.config_manager import random_seeds, loss_fn
+from optimizers.k_bfgs_utils import *
+import utils.config_manager as cm
 
 
 class K_BFGS(torch.optim.Optimizer):
     """
-    Implements the Kronecker-factored LBFGS algorithm presented in `Kronecker-factored Quasi-Newton Methods for Deep Learning`_.
+    Implements the Kronecker-factored LBFGS algorithm presented in 
+    `Kronecker-factored Quasi-Newton Methods for Deep Learning` https://doi.org/10.48550/arXiv.2102.06737.
+    
     Arguments:
-        
-    .. _Kronecker-factored Quasi-Newton Methods for Deep Learning:
-        https://doi.org/10.48550/arXiv.2102.06737
+        model (torch.nn.Module): model to optimize.
+        train_dataset (torch.utils.data.DataLoader): training dataset.
+        algorithm (str, optional): algorithm to use. Can be 'K-BFGS' or 'K-BFGS(L)'. Default: 'K-BFGS'
+        lr (float, optional): learning rate. Default: 0.3
+        lambda_damping (float, optional): damping for (s, y). Default: 0.3
+        rho_momentum (float, optional): gradient momentum. Default: 0.9
+        tau_weight_decay (float, optional): weight decay. Default: 1e-5
+        beta_A_decay (float, optional): decay rate for A inverse. Default: 0.9
+        t_inv_freq (int, optional): frequency of the inverse update. Default: 20
+        history_size (int, optional): number of (s, y) to store. Default: 50
+        debug (bool, optional): if True, uses 1 mini-batch for A inverse approximation. Default: False
+        verbose (bool, optional): if True, prints information about the training. Default: True
+    
+    Adapted from: https://github.com/renyiryry/kbfgs_neurips2020_public
     """
 
-    def __init__(self, params, 
+    def __init__(self, model,
+                 train_dataset, 
                 algorithm = 'K-BFGS', # ['K-BFGS', 'K-BFGS(L)']
                 lr = 0.3,
                 lambda_damping = 0.3,
+                rho_momentum = 0.9,
+                tau_weight_decay = 1e-5,
+                beta_A_decay = 0.9,
+                t_inv_freq = 20,
+                history_size = 50,
+                debug = False,
                 verbose = True):
 
-        ### standard optimizer initialization
         if not (algorithm in ['K-BFGS', 'K-BFGS(L)']):
             raise ValueError("Invalid algorithm: {}".format(algorithm))
 
-        if not (0.0 < lr <= 1):
-            raise ValueError("Invalid lr: {}".format(lr))
-
-        if not (0.0 < lambda_damping <= 1):
-            raise ValueError("Invalid damping: {}".format(lambda_damping))
-
-        defaults = dict(algorithm=algorithm,
-                        alpha=lr,
-                        damping=lambda_damping,
+        defaults = dict(model=model,
+                        train_dataset=train_dataset,
+                        algorithm=algorithm,
+                        lr=lr,
+                        lambda_damping=lambda_damping,
+                        rho_momentum=rho_momentum,
+                        tau_weight_decay=tau_weight_decay,
+                        beta_A_decay=beta_A_decay,
+                        t_inv_freq=t_inv_freq,
+                        history_size=history_size,
+                        debug=debug,
                         verbose=verbose)
-        super(K_BFGS, self).__init__(params, defaults)
+        super(K_BFGS, self).__init__(model.parameters(), defaults)
 
         if len(self.param_groups) != 1:
             raise ValueError(
                 "K_BFGS doesn't support per-parameter options (parameter groups)")
 
-        self._params = self.param_groups[0]['params']
-        ### end
-
-
-        ### initialization from training function of K-BFGS
-        args = {}
-        args['algorithm'] = algorithm
-        args['alpha'] = lr
-        args['momentum_gradient_rho'] = 0.9
-        
-        
-        args['tau'] = 10**(-5) 
-        
-
-        args['Kron_BFGS_A_decay'] = 0.9
-        args['Kron_BFGS_A_inv_freq'] = 20
-
-        args['Kron_BFGS_H_initial'] = 1
-        args['Kron_LBFGS_Hg_initial'] = 1
-
-        args['Kron_BFGS_A_LM_epsilon'] = np.sqrt(lambda_damping)
-        args['Kron_BFGS_H_epsilon'] = np.sqrt(lambda_damping)
-
-        args['Kron_BFGS_number_s_y'] = 100
-        
-        args['tuning_criterion'] = 'train_loss'
-        args['seed_number'] = random_seeds[0]
-        
-        
         params = {}
         torch.cuda.empty_cache()
-        seed_number = args['seed_number']
-        params['seed_number'] = seed_number
 
-        np.random.seed(seed_number)
-        torch.manual_seed(seed_number)
+        params['debug'] = debug
+        params['alpha'] = lr
+        params['tau'] = tau_weight_decay
+
+        params['algorithm'] = algorithm
+   
+        params['Kron_BFGS_A_decay'] = beta_A_decay
+        params['Kron_LBFGS_Hg_initial'] = 1
+        params['Kron_BFGS_action_h'] = 'Hessian-action-BFGS' 
+        params['Kron_BFGS_A_LM_epsilon'] = np.sqrt(lambda_damping)
+        params['Kron_BFGS_H_epsilon'] = np.sqrt(lambda_damping)
+        params['Kron_BFGS_A_inv_freq'] = t_inv_freq
+
+        params['Kron_BFGS_if_homo'] = True 
+        
+        if algorithm == 'K-BFGS':
+            params['Kron_BFGS_H_initial'] = 1 # B           
+            params['Kron_BFGS_action_a'] = 'BFGS' # B 
+        
+        if algorithm == 'K-BFGS(L)':
+            params['Kron_BFGS_action_a'] = 'LBFGS' # L
+            params['Kron_BFGS_number_s_y'] = history_size # L
+            
+        params['seed_number'] = cm.random_seed
 
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-        params['if_gpu'] = args['if_gpu']
-
-        if params['if_gpu'] and torch.cuda.is_available():  
-            dev = "cuda:0" 
-        else:  
-            dev = "cpu" 
-
-        device = torch.device(dev)  
+        device = cm.device 
         params['device'] = device
-
-        params['algorithm'] = args['algorithm']
-        params['matrix_name'] = args['matrix_name']
-
-
-        params['name_dataset'] = args['dataset']
-        params['name_loss'] = args['name_loss']
-        params['momentum_gradient_rho'] = args['momentum_gradient_rho']
+        params['momentum_gradient_rho'] = rho_momentum
         
 
-
-        self.params = params
-        self.args = args
-
-    
-    def optimizer_initialization(self, model, train_dataset, batch_size):
-        '''
-        Call after initialization of model, dataset and optimizer
-        '''
-        params = self.params
-        args = self.args
-
-
-
-        args['N1'] = batch_size
-        args['N2'] = args['N1']
+        params['N1'] = train_dataset.batch_size
+        params['N2'] = params['N1']
+        params['num_train_data'] = len(train_dataset)
+        params['layers_params'] = model.layers_params 
+        params['numlayers'] = model.numlayers 
         
-        # TODO: explain this: why do i need all this. how is this different for convolutional network?
-        # params['name_model'] = model.name_model
-        params['layersizes'] = model.layersizes
-        params['layers_params'] = model.layers_params
-        params['numlayers'] = model.numlayers
-        
-
         data_ = {}
         data_['model'] = model
-        
         data_['dataset'] = train_dataset
-
-        params['num_train_data'] = len(train_dataset)
-        params['alpha'] = args['alpha']
-        params['tau'] = args['tau']
-        
-        #########################
-        data_, params = train_initialization(data_, params, args)
-        #########################
-        
+        data_, params = train_initialization(data_, params)
         data_['model_grad_momentum'] = get_zero_torch(params)
-
-
 
         self.data_ = data_
         self.params = params
-        self.args = args
 
 
-    def _gather_flat_grad(self):
-        views = list()
-        for p in self._params:
-            if p.grad is None:
-                view = p.data.new(p.data.numel()).zero_()
-            elif p.grad.data.is_sparse:
-                view = p.grad.data.to_dense().view(-1)
-            else:
-                view = p.grad.contiguous().view(-1)
-            views.append(view)
-        return torch.cat(views, 0)
+    def step(self, data_, params):
+        """
+            Performs a single optimization step.
+        """
 
+        ### step 1: update model weights using current Ha and Hg per layer
+        numlayers = params['numlayers']
+        data_['model_homo_grad_used_torch'] = get_homo_grad(data_['model_grad_used_torch'], params)
 
-### adapted from kbfgs_utils.py
-
-
-def step(self):
-    """
-        Performs a single optimization step.
-    """
-
-    data_ = self.data_ 
-    params = self.params
-
-
-    ### step 1: update model weights using current Ha and Hg per layer
-    numlayers = params['numlayers']
-    data_['model_homo_grad_used_torch'] = get_homo_grad(data_['model_grad_used_torch'], params)
-
-    delta = []
-    for l in range(numlayers):
-        action_h = params['Kron_BFGS_action_h']
-        action_a = params['Kron_BFGS_action_a']
-        step_ = 1
-        delta_l, data_ = Kron_BFGS_update_per_layer(data_, params, l, action_h, action_a, step_)
-        delta.append(delta_l)
+        delta = []
+        for l in range(numlayers):
+            action_h = params['Kron_BFGS_action_h']
+            action_a = params['Kron_BFGS_action_a']
+            step_ = 1
+            delta_l, data_ = Kron_BFGS_update_per_layer(data_, params, l, action_h, action_a, step_)
+            delta.append(delta_l)
+            
+        p = get_opposite(delta)
+        data_['p_torch'] = p
         
-    p = get_opposite(delta)
-    data_['p_torch'] = p
-    
-    # intermediate weights update for a copy of the model
-    model_new = copy.deepcopy(data_['model'])
-    for l in range(model_new.numlayers):
-        for key in model_new.layers_weight[l]:
-            model_new.layers_weight[l][key].data += params['alpha'] * p[l][key].data
 
+        ### step 2: update inverse matrices Ha and Hg per layer ###
 
-    ### step 2: update inverse matrices Ha and Hg per layer ###
+        # intermediate weights update for a copy of the model
+        # model_new = copy.deepcopy(data_['model'])
+        model_new = type(data_['model'])()
+        model_new.load_state_dict(data_['model'].state_dict())
 
-    # forward-backward pass
-    z_next, a_next, h_next = model_new.forward(data_['X_mb'])
-    loss = loss_fn(z_next, data_['t_mb'])
+        for l in range(model_new.numlayers):
+            for key in model_new.layers_weights[l]:
+                model_new.layers_weights[l][key].data += params['alpha'] * p[l][key].data
 
-    model_new.zero_grad()
-    loss.backward()
-    
-    a_grad_next = [len(data_['X_mb']) * (a_l.grad) for a_l in a_next] # TODO: explain this, why gradient are multiplied with the size of mini-batch
-    data_['a_grad_next'] = a_grad_next
-    data_['h_next'] = h_next
-    data_['a_next'] = a_next
-    
-    for l in range(numlayers):
-        action_h = params['Kron_BFGS_action_h']
-        action_a = params['Kron_BFGS_action_a']
-        step_ = 2
-        _, data_ = Kron_BFGS_update_per_layer(data_, params, l, action_h, action_a, step_)
+        # forward-backward pass
+        z_next = model_new.forward(data_['X_mb'])
+        a_next = model_new.a
+        h_next = model_new.h
+        loss = cm.loss_fn(z_next, data_['t_mb'])
+
+        model_new.zero_grad()
+        loss.backward()
         
-                
-    return data_, params
+        a_grad_next = [len(data_['X_mb']) * (a_l.grad) for a_l in a_next]
+        for l in range(params['numlayers']):
+            if params['layers_params'][l]['name'] == 'conv':
+                a_grad_next[l] = a_grad_next[l].mean(dim=[2,3])
+        data_['a_grad_next'] = a_grad_next
+
+        a_next, h_next = reshape_a_h(a_next, h_next, params['layers_params'])
+        data_['h_next'] = h_next
+        data_['a_next'] = a_next
+        
+        for l in range(numlayers):
+            action_h = params['Kron_BFGS_action_h']
+            action_a = params['Kron_BFGS_action_a']
+            step_ = 2
+            _, data_ = Kron_BFGS_update_per_layer(data_, params, l, action_h, action_a, step_)
+            
+        return data_, params
+
 
 def Kron_BFGS_update_per_layer(data_, params, l, action_h, action_a, step_):
     i = params['i']
@@ -242,7 +200,7 @@ def Kron_BFGS_update_per_layer(data_, params, l, action_h, action_a, step_):
         if action_h in ['Hessian-action-BFGS', 'Hessian-action-LBFGS']:
             # update A
             A_l = Kron_BFGS_matrices_l['A']
-            if params['N1'] < params['num_train_data'] and i == 0:
+            if params['N1'] < params['num_train_data']*params['N1'] and i == 0:
                 1
             else:
                 beta_ = params['Kron_BFGS_A_decay']
@@ -256,7 +214,7 @@ def Kron_BFGS_update_per_layer(data_, params, l, action_h, action_a, step_):
             Kron_BFGS_matrices_l['A'] = A_l
 
             if action_h in ['Hessian-action-BFGS', 'Hessian-action-LBFGS']:
-                epsilon_ = params['Kron_BFGS_A_LM_epsilon']
+                epsilon_ = params['Kron_BFGS_A_LM_epsilon'] * np.sqrt(data_['model'].layers_params[l]['tau'])
 
                 A_l_LM = Kron_BFGS_matrices_l['A'] + epsilon_ * torch.eye(Kron_BFGS_matrices_l['A'].size(0), device=device)
                 Kron_BFGS_matrices_l['A_LM'] = A_l_LM
@@ -270,7 +228,9 @@ def Kron_BFGS_update_per_layer(data_, params, l, action_h, action_a, step_):
         return delta_l, data_
     
     elif step_ == 2:
-        
+        if i % params['Kron_BFGS_A_inv_freq'] != 0:
+            return [], data_
+
         Kron_BFGS_matrices_l = data_['Kron_BFGS_matrices'][l]
         
         a_grad_next = data_['a_grad_next']
@@ -382,6 +342,7 @@ def Kron_BFGS_update_per_layer(data_, params, l, action_h, action_a, step_):
         
         return [], data_
 
+
 def get_BFGS_PowellHDamping(s_l_a, y_l_a, alpha, l, data_, params):
     Kron_BFGS_matrices_l = data_['Kron_BFGS_matrices'][l]
 
@@ -415,6 +376,7 @@ def get_BFGS_PowellHDamping(s_l_a, y_l_a, alpha, l, data_, params):
     
     return s_l_a, y_l_a, sy_over_yHy_before
 
+
 def kron_bfgs_update_damping(s_l_a, y_l_a, l, data_, params):
     s_l_a, y_l_a, _ = get_BFGS_PowellHDamping(s_l_a, y_l_a, 0.2, l, data_, params)
     s_l_a, y_l_a = get_BFGS_ModifiedDamping(s_l_a, y_l_a, l, data_, params)
@@ -423,7 +385,7 @@ def kron_bfgs_update_damping(s_l_a, y_l_a, l, data_, params):
 
 
 def get_BFGS_ModifiedDamping(s_l_a, y_l_a, l, data_, params):
-    alpha = params['Kron_BFGS_H_epsilon']
+    alpha = params['Kron_BFGS_H_epsilon'] * 1 / np.sqrt(params['layers_params'][l]['tau'])
 
     s_T_s = torch.dot(s_l_a, s_l_a)
     s_T_y = torch.dot(s_l_a, y_l_a)
@@ -476,6 +438,7 @@ def Kron_BFGS_compute_direction(model_homo_grad, l, data_, params):
         
     return delta_l
 
+
 def LBFGS_Hv(v, s_y_pairs, params):
     list_s = s_y_pairs['s']
     list_y = s_y_pairs['y']
@@ -504,6 +467,7 @@ def LBFGS_Hv(v, s_y_pairs, params):
         if len_v_size == 1:
             Hv = Hv.squeeze(1)
     return Hv
+
 
 def Kron_LBFGS_append_s_y(s, y, s_y_pairs, g_k, gamma, params):    
     s = s.unsqueeze(1)
@@ -607,6 +571,7 @@ def Kron_LBFGS_append_s_y(s, y, s_y_pairs, g_k, gamma, params):
         
     return s_y_pairs
 
+
 def get_BFGS_formula(H, s, y, g_k):
     s = s.data
     y = y.data
@@ -632,86 +597,88 @@ def get_BFGS_formula(H, s, y, g_k):
     return H, 0
 
 
-### adapted from training_utils.py
-
-
-def train_initialization(data_, params, args):
-    algorithm = params['algorithm']
-    
-    params['N1'] = args['N1']
-    params['N2'] = args['N2']
-
-    params['Kron_BFGS_A_decay'] = args['Kron_BFGS_A_decay'] 
-    params['Kron_LBFGS_Hg_initial'] = args['Kron_LBFGS_Hg_initial'] 
-    params['Kron_BFGS_action_h'] = 'Hessian-action-BFGS' 
-    params['Kron_BFGS_A_LM_epsilon'] = args['Kron_BFGS_A_LM_epsilon'] 
-    params['Kron_BFGS_H_epsilon'] = args['Kron_BFGS_H_epsilon'] 
-
-    params['Kron_BFGS_if_homo'] = True 
-    
-    if algorithm == 'K-BFGS':
-        params['Kron_BFGS_H_initial'] = args['Kron_BFGS_H_initial'] # B           
-        params['Kron_BFGS_action_a'] = 'BFGS' # B 
-    
-    if algorithm == 'K-BFGS(L)':
-        params['Kron_BFGS_action_a'] = 'LBFGS' # L
-        params['Kron_BFGS_number_s_y'] = args['Kron_BFGS_number_s_y'] # L
-
+def train_initialization(data_, params):
     data_['Kron_LBFGS_s_y_pairs'] = {}
     if params['Kron_BFGS_action_a'] == 'LBFGS':
-        L = len(params['layersizes']) - 1
+        L = params['numlayers']
         data_['Kron_LBFGS_s_y_pairs']['a'] = []
         for l in range(L):
             data_['Kron_LBFGS_s_y_pairs']['a'].append(
                 {'s': [], 'y': [], 'R_inv': [], 'yTy': [], 'D_diag': [], 'left_matrix': [], 'right_matrix': [], 'gamma': []}
             )
-    
-            
-    layersizes = params['layersizes']
+
     layers_params = params['layers_params']
-    
+
     device = params['device']
-    N1 = params['N1']
     numlayers = params['numlayers']
     model = data_['model']
         
     data_['Kron_BFGS_momentum_s_y'] = []
     for l in range(numlayers):
         Kron_BFGS_momentum_s_y_l = {}
-        Kron_BFGS_momentum_s_y_l['s'] = torch.zeros(layersizes[l+1], device=device)
-        Kron_BFGS_momentum_s_y_l['y'] = torch.zeros(layersizes[l+1], device=device)
+        Kron_BFGS_momentum_s_y_l['s'] = torch.zeros(layers_params[l]['output_size'], device=device)
+        Kron_BFGS_momentum_s_y_l['y'] = torch.zeros(layers_params[l]['output_size'], device=device)
         data_['Kron_BFGS_momentum_s_y'].append(Kron_BFGS_momentum_s_y_l)
 
     data_['Kron_BFGS_matrices'] = []
     for l in range(numlayers):
         Kron_BFGS_matrices_l = {}
-        size_A = layers_params[l]['input_size'] + 1
+        size_A = layers_params[l]['input_size'] + 1 
         Kron_BFGS_matrices_l['A'] = torch.zeros(size_A, size_A, device=device, requires_grad=False)
         data_['Kron_BFGS_matrices'].append(Kron_BFGS_matrices_l)
-
-    if params['N1'] < params['num_train_data']:        
-        i = 0 
-        j = 0 
-        while i + N1 <= params['num_train_data']:
+    # exact estimation of post-activation matrix A
+    model.eval()
+    if params['N1'] < params['num_train_data']*params['N1']:        
+        for batch, (X, y) in enumerate(data_['dataset']): 
             torch.cuda.empty_cache()
-            X_mb, t_mb = data_['dataset'].train.next_batch(N1)
-            X_mb = torch.from_numpy(X_mb).to(device)
-            z, a, h = model.forward(X_mb)
+            X.to(device)
+            z = model.forward(X)
+            a = model.a
+            h = model.h
 
-            i += N1
-            j += 1
+            a, h = reshape_a_h(a, h, layers_params)
+
+            j = batch + 1
 
             for l in range(numlayers):
-                homo_h_l = torch.cat((h[l], torch.ones(N1, 1, device=device)), dim=1)
-                A_j = 1/N1 * torch.mm(homo_h_l.t(), homo_h_l).data
+                h_l = h[l]
+                if layers_params[l]['name'] == 'conv':
+                    ones = torch.ones(h_l.size()[0], 1, device=device)
+                    h_l = torch.cat([*[h_l for _ in range(1)], ones], dim=1)
+                    A_j = torch.matmul(torch.t(h_l), h_l) / h_l.size(0)
+                elif layers_params[l]['name'] == 'fc':
+                    ones = torch.ones(h_l.size()[0], 1, device=device)
+                    h_l = torch.cat([h_l.data, ones], dim=1)
+                    A_j = torch.matmul(torch.t(h_l), h_l) / h_l.size(0)
                 data_['Kron_BFGS_matrices'][l]['A'] *= (j-1)/j
                 data_['Kron_BFGS_matrices'][l]['A'] += 1/j * A_j
-        
+
+            if params['debug']:
+                break    
+
     return data_, params
 
 
+def reshape_a_h(a, h, layers_params, kernel_size=3, stride=1):
+    a_new = []
+    h_new = []
+    for l in range(len(a)):
+        if layers_params[l]['name'] == 'conv':
+            h_l = h[l].unfold(dimension=3, size=kernel_size, step=stride)
+            h_l = h_l.unfold(2, kernel_size, stride)
+            h_l = h_l.mean(dim=[2,3])
+            h_l = h_l.reshape(-1, layers_params[l]['input_size'])
+            a_l = a[l]
+            a_l = a_l.mean(dim=[2,3])
+        elif layers_params[l]['name'] == 'fc':
+            h_l = h[l]
+            a_l = a[l]
+        a_new.append(a_l)
+        h_new.append(h_l)
+    return a_new, h_new
+
+
 def get_second_order_caches(z, a, h, data_, params):
-    # TODO: explain why and what is happening in this method
     N1 = params['N1']
     N2 = params['N2']
 
@@ -727,23 +694,31 @@ def get_second_order_caches(z, a, h, data_, params):
     # Empirical Fisher
     t_mb = data_['t_mb']
     data_['t_mb_pred_N2'] = t_mb[N2_index]
+    # collect pre-activations gradients
     data_['a_grad_N2'] = [N2 * (a_l.grad)[N2_index] for a_l in a]
+    # reshape a and h
+    a, h, = reshape_a_h(a, h, params['layers_params'])
     data_['h_N2'] = [h_l[N2_index].data for h_l in h]
     data_['a_N2'] = [a_l[N2_index].data for a_l in a]
+    # reshape gradients
+    for l in range(params['numlayers']):
+        if params['layers_params'][l]['name'] == 'conv':
+            data_['a_grad_N2'][l] = data_['a_grad_N2'][l].mean(dim=[2,3])
 
     return data_
 
 
 def update_parameter(p_torch, model, params):
-    # TODO: properly update parameters of convolutional network
     numlayers = params['numlayers']
     alpha = params['alpha']
     device = params['device']
 
-    
     for l in range(numlayers):
-        if params['layers_params'][l]['name'] in ['fully-connected']:
-            model.layers_weight[l]['W'].data += alpha * p_torch[l]['W'].data
-            model.layers_weight[l]['b'].data += alpha * p_torch[l]['b'].data
+        if params['layers_params'][l]['name'] == 'conv':
+            model.layers_weights[l]['W'].data += alpha * p_torch[l]['W'].data
+            model.layers_weights[l]['b'].data += alpha * p_torch[l]['b'].data
+        elif params['layers_params'][l]['name'] == 'fc':
+            model.layers_weights[l]['W'].data += alpha * p_torch[l]['W'].data
+            model.layers_weights[l]['b'].data += alpha * p_torch[l]['b'].data
         
     return model

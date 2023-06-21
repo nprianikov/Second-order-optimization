@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from src.layers_factory import LayersFactory
 
+# TODO: refactor remaining models
 
 class SmallCNN(nn.Module):
     def __init__(self, input_shape=1, output_shape=10, activation_fn=nn.ReLU, p=0.5, dataset="mnist"):
@@ -9,77 +10,123 @@ class SmallCNN(nn.Module):
         # factory
         self.lfc = LayersFactory(input_shape, output_shape, p, dataset)
         # unique
-        self.convIn_32 = self.lfc.create_layer('convIn_32')
         self.pool = self.lfc.create_layer('pool')
         self.dropout = self.lfc.create_layer('dropout')
         self.activation_fn = activation_fn()
+        self.kernel_size = 3
 
-        self.conv1 = nn.Sequential(
-            self.convIn_32,
-            self.activation_fn,
+        # layers
+        self._layers = []
+        self._layers_names = []
+        self._layers_input_size = []
+        self._layers_output_size = []
+        self._tau = []
+        self.layers_params = []
+        self.a = []
+        self.h = []
+        # input
+        self.conv1 = self.lfc.create_layer('convIn_32')
+        self._layers.append(self.conv1)
+        self._layers_names.append('conv')
+        # conv2
+        self.conv2 = nn.Sequential(
             self.pool,
+            self.lfc.create_layer('conv32_32')
         )
-
-        self.conv2 = self.lfc.create_layer('conv32_32')
-            
-        self.conv3 = self.lfc.create_layer('conv32_64')
-
-        self.flatten = self.lfc.create_layer('flatten')
-        self.fcSmall = self.lfc.create_layer('fcSmall')
-        self.fc64_Out = self.lfc.create_layer('fc64_Out')
-
+        self._layers.append(self.conv2)
+        self._layers_names.append('conv')
+        # conv3
+        self.conv3 = nn.Sequential(
+            self.pool,
+            self.lfc.create_layer('conv32_64')
+        )
+        self._layers.append(self.conv3)
+        self._layers_names.append('conv')
+        # flatten
+        self.flat = nn.Sequential(
+            self.pool,
+            self.lfc.create_layer('flatten'),
+        )
+        # fully connected
+        self.fc = nn.Sequential(
+            self.lfc.create_layer('fcSmall')
+        )
+        self._layers.append(self.fc)
+        self._layers_names.append('fc')
+        # out
         self.out = nn.Sequential(
-            self.flatten,
-            self.fcSmall,
-            self.activation_fn,
             self.dropout,
-            self.fc64_Out,
+            self.lfc.create_layer('fc64_Out')
         )
+        self._layers.append(self.out)
+        self._layers_names.append('fc')
+
+        # number of layers (wihout flattening)
+        self.numlayers = len(self._layers)
+        # accessing layer weights in the matrix form W: (out x in), b: (out x 1)
+        self.layers_weights = []
+        grouped = zip(*[iter(self.parameters())]*2)
+        for l, (param1, param2) in enumerate(grouped):
+            layers_weights_l = {}
+            if self._layers_names[l] == 'conv':
+                layers_weights_l['W'] = param1.reshape(param1.size()[0], -1)
+                layers_weights_l['b'] = param2
+                self._layers_input_size.append(layers_weights_l['W'].size()[1])
+            elif self._layers_names[l] == 'fc':
+                layers_weights_l['W'] = param1
+                layers_weights_l['b'] = param2
+                self._layers_input_size.append(param1.size()[1])
+
+            self._layers_output_size.append(param1.size()[0])
+            self.layers_weights.append(layers_weights_l)
+
+        for l in range(len(self._layers)):
+            layer_i = {}
+            layer_i['name'] = self._layers_names[l]
+            layer_i['input_size'] = self._layers_input_size[l]
+            layer_i['output_size'] = self._layers_output_size[l]
+            self.layers_params.append(layer_i)
         
     def forward(self, x):
-        """
-        Forward pass through model
-        Returns:
-        - x: outputs scores from final layer
-        - a: outputs of layers (pre-activation)
-        - h: inputs of layers
-        """
-        # TODO: append to h before or after pooling layer? + flattening
+        self.a = [] # pre-activations
+        self.h = [] # layer inputs (input+post-activations)
+        input_ = x
+        fc_counter = 0
 
-        a = [] 
-        h = []
+        for l in range(len(self._layers)):
+            if self.layers_params[l]['name'] == 'fc' and fc_counter == 0:
+                # flattening has no trainable parameters
+                input_ = self.flat(input_)
+                fc_counter += 1
+            self.h.append(input_)
+            a_l = self._layers[l](input_)
+            input_ = self.activation_fn(a_l)
+            if a_l.requires_grad:
+                a_l.retain_grad() 
+            self.a.append(a_l)
 
-        # layer 1
-        h.append(x)
-        x = self.convIn_32(x)
-        a.append(x)
-        x = self.activation_fn(x)
-        # layer 2
-        h.append(x)
-        x = self.pool(x)
-        x = self.conv2(x)
-        a.append(x)
-        x = self.activation_fn(x)
-        # layer 3
-        h.append(x)
-        x = self.pool(x)
-        x = self.conv3(x)
-        a.append(x)
-        x = self.activation_fn(x)
-        # layer 4
-        h.append(x)
-        x = self.pool(x)
-        x = self.flatten(x)
-        x = self.fcSmall(x)
-        a.append(x)
-        x = self.activation_fn(x)
-        # layer 5
-        h.append(x)
-        x = self.dropout(x)
-        x = self.fc64_Out(x)
-        a.append(x)
+        if len(self._tau) == 0:
+            for l in range(len(self._layers)):
+                if self.layers_params[l]['name'] == 'fc':
+                    self.layers_params[l]['tau'] = 1.0
+                elif self.layers_params[l]['name'] == 'conv':
+                    self.layers_params[l]['tau'] = self.a[l].size()[2] * self.a[l].size()[3]
 
-        return x, a, h
+        return self.a[len(self.a)-1]
+    
+    def get_layers_weights(self):
+        self.layers_weights = []
+        grouped = zip(*[iter(self.parameters())]*2)
+        for l, (param1, param2) in enumerate(grouped):
+            layers_weights_l = {}
+            if self._layers_names[l] == 'conv':
+                layers_weights_l['W'] = param1.reshape(param1.size()[0], -1)
+                layers_weights_l['b'] = param2
+            elif self._layers_names[l] == 'fc':
+                layers_weights_l['W'] = param1
+                layers_weights_l['b'] = param2
+            self.layers_weights.append(layers_weights_l)
+        return self.layers_weights
 
 
 class DepthCNN(nn.Module):
@@ -88,71 +135,88 @@ class DepthCNN(nn.Module):
         # factory
         self.lfc = LayersFactory(input_shape, output_shape, p, dataset)
         # unique
-        self.convIn_32 = self.lfc.create_layer('convIn_32')
         self.activation_fn = activation_fn()
         self.pool = self.lfc.create_layer('pool')
         self.dropout = self.lfc.create_layer('dropout')
-
-        self.conv1 = nn.Sequential(
-            self.convIn_32,
-            self.activation_fn,
-            self.dropout,
-        )
-
+        
+        # layers
+        self._layers = []
+        self.layers_params = []
+        self.a = []
+        self.h = []
+        # input
+        self.conv1 = self.lfc.create_layer('convIn_32')
+        self._layers.append(self.conv1)
+        self._layers_names.append('conv')
+        # conv2
         self.conv2 = nn.Sequential(
-            self.lfc.create_layer('conv32_32'),
-            self.activation_fn,
             self.dropout,
-            self.pool,
+            self.lfc.create_layer('conv32_32'),
         )
-
+        self._layers.append(self.conv2)
+        self._layers_names.append('conv')
+        # conv3
         self.conv3 = nn.Sequential(
-            self.lfc.create_layer('conv32_32'),
             self.dropout,
-            self.activation_fn,
+            self.pool,
+            self.lfc.create_layer('conv32_32'),
         )
-
+        self._layers.append(self.conv3)
+        self._layers_names.append('conv')
+        # conv4
         self.conv4 = nn.Sequential(
+            self.dropout,
             self.lfc.create_layer('conv32_32'),
-            self.activation_fn,
-            self.dropout,
-            self.pool,
         )
-
+        self._layers.append(self.conv4)
+        self._layers_names.append('conv')
+        # conv5
         self.conv5 = nn.Sequential(
-            self.lfc.create_layer('conv32_64'),
-            self.activation_fn,
-            self.dropout,
-        )
-
-        self.conv6 = nn.Sequential(
-            self.lfc.create_layer('conv64_64'),
-            self.activation_fn,
             self.dropout,
             self.pool,
+            self.lfc.create_layer('conv32_64'),
         )
-
-        self.flatten = self.lfc.create_layer('flatten')
-        self.fcDepth = self.lfc.create_layer('fcDepth')
-        self.fc64_Out = self.lfc.create_layer('fc64_Out')
-
-        self.out = nn.Sequential(
-            self.flatten,
-            self.fcDepth,
-            self.activation_fn,
+        self._layers.append(self.conv5)
+        self._layers_names.append('conv')
+        # conv6
+        self.conv6 = nn.Sequential(
             self.dropout,
-            self.fc64_Out,
+            self.lfc.create_layer('conv64_64'),
         )
+        self._layers.append(self.conv6)
+        self._layers_names.append('conv')
+        # fully connected
+        self.fc = nn.Sequential(
+            self.dropout,
+            self.pool,
+            self.lfc.create_layer('flatten'),
+            self.lfc.create_layer('fcDepth')
+        )
+        self._layers.append(self.fc)
+        self.layers_params.append('fc')
+        # out
+        self.out = nn.Sequential(
+            self.dropout,
+            self.lfc.create_layer('fc64_Out')
+        )
+        self._layers.append(self.out)
+        self.layers_params.append('fc')
+
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = self.conv4(x)
-        x = self.conv5(x)
-        x = self.conv6(x)
-        x = self.out(x)
-        return x
+        self.a = []
+        self.h = []
+        input_ = x
+
+        for l in range(len(self._layers)):
+            self.h.append(input_)
+            a_l = self._layers[l](input_)
+            input_ = self.activation_fn(a_l)
+            if a_l.requires_grad:
+                a_l.retain_grad() 
+            self.a.append(a_l)
+
+        return self.a[len(self.a)-1]
 
 
 class WidthCNN(nn.Module):
@@ -161,50 +225,67 @@ class WidthCNN(nn.Module):
         # factory
         self.lfc = LayersFactory(input_shape, output_shape, p, dataset)
         # unique
-        self.convIn_64 = self.lfc.create_layer('convIn_64')
         self.activation_fn = activation_fn()
         self.pool = self.lfc.create_layer('pool')
         self.dropout = self.lfc.create_layer('dropout')
-
-        self.conv1 = nn.Sequential(
-            self.convIn_64,
-            self.activation_fn,
-            self.dropout,
-            self.pool,
-        )
-
+        
+        # layers
+        self._layers = []
+        self.layers_params = []
+        self.a = []
+        self.h = []
+        # input
+        self.conv1 = self.lfc.create_layer('convIn_64')
+        self._layers.append(self.conv1)
+        self._layers_names.append('conv')
+        # conv2
         self.conv2 = nn.Sequential(
+            self.dropout,
+            self.pool,
             self.lfc.create_layer('conv64_64'),
-            self.activation_fn,
-            self.dropout,
-            self.pool,
         )
-
+        self._layers.append(self.conv2)
+        self._layers_names.append('conv')
+        # conv3
         self.conv3 = nn.Sequential(
-            self.lfc.create_layer('conv64_128'),
-            self.activation_fn,
             self.dropout,
             self.pool,
+            self.lfc.create_layer('conv64_128'),
         )
-
-        self.flatten = self.lfc.create_layer('flatten')
-        self.fcWidth = self.lfc.create_layer('fcWidth')
-        self.fc128_Out = self.lfc.create_layer('fc128_Out')
-
-        self.out = nn.Sequential(
-            self.flatten,
-            self.fcWidth,
-            self.activation_fn,
+        self._layers.append(self.conv3)
+        self._layers_names.append('conv')
+        # fully connected
+        self.fc = nn.Sequential(
             self.dropout,
-            self.fc128_Out,
+            self.pool,
+            self.lfc.create_layer('flatten'),
+            self.lfc.create_layer('fcWidth')
         )
+        self._layers.append(self.fc)
+        self.layers_params.append('fc')
+        # out
+        self.out = nn.Sequential(
+            self.dropout,   
+            self.lfc.create_layer('fc128_Out')
+        )
+        self._layers.append(self.out)
+        self.layers_params.append('fc')
+
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = self.out(x)
-        return x
+        self.a = []
+        self.h = []
+        input_ = x
+
+        for l in range(len(self._layers)):
+            self.h.append(input_)
+            a_l = self._layers[l](input_)
+            input_ = self.activation_fn(a_l)
+            if a_l.requires_grad:
+                a_l.retain_grad() 
+            self.a.append(a_l)
+
+        return self.a[len(self.a)-1]
 
 
 class DepthWidthCNN(nn.Module):
@@ -213,68 +294,85 @@ class DepthWidthCNN(nn.Module):
         # factory
         self.lfc = LayersFactory(input_shape, output_shape, p, dataset)
         # unique
-        self.convIn_64 = self.lfc.create_layer('convIn_64')
         self.activation_fn = activation_fn()
         self.pool = self.lfc.create_layer('pool')
         self.dropout = self.lfc.create_layer('dropout')
-
-        self.conv1 = nn.Sequential(
-            self.convIn_64,
-            self.activation_fn,
-            self.dropout,
-        )
-
+        
+        # layers
+        self._layers = []
+        self.layers_params = []
+        self.a = []
+        self.h = []
+        # input
+        self.conv1 = self.lfc.create_layer('convIn_64')
+        self._layers.append(self.conv1)
+        self._layers_names.append('conv')
+        # conv2
         self.conv2 = nn.Sequential(
-            self.lfc.create_layer('conv64_64'),
-            self.activation_fn,
             self.dropout,
-            self.pool,
+            self.lfc.create_layer('conv64_64'),
         )
-
+        self._layers.append(self.conv2)
+        self._layers_names.append('conv')
+        # conv3
         self.conv3 = nn.Sequential(
-            self.lfc.create_layer('conv64_64'),
-            self.activation_fn,
             self.dropout,
+            self.pool,
+            self.lfc.create_layer('conv64_64'),
         )
-
+        self._layers.append(self.conv3)
+        self._layers_names.append('conv')
+        # conv4
         self.conv4 = nn.Sequential(
+            self.dropout,
             self.lfc.create_layer('conv64_64'),
-            self.activation_fn,
-            self.dropout,
-            self.pool,
         )
-
+        self._layers.append(self.conv4)
+        self._layers_names.append('conv')
+        # conv5
         self.conv5 = nn.Sequential(
-            self.lfc.create_layer('conv64_128'),
-            self.activation_fn,
-            self.dropout,
-        )
-
-        self.conv6 = nn.Sequential(
-            self.lfc.create_layer('conv128_128'),
-            self.activation_fn,
             self.dropout,
             self.pool,
+            self.lfc.create_layer('conv64_128'),
         )
-
-        self.flatten = self.lfc.create_layer('flatten')
-        self.fcDepthWidth = self.lfc.create_layer('fcDepthWidth')
-        self.fc128_Out = self.lfc.create_layer('fc128_Out')
-
-        self.out = nn.Sequential(
-            self.flatten,
-            self.fcDepthWidth,
-            self.activation_fn,
+        self._layers.append(self.conv5)
+        self._layers_names.append('conv')
+        # conv6
+        self.conv6 = nn.Sequential(
             self.dropout,
-            self.fc128_Out,
+            self.lfc.create_layer('conv128_128'),
         )
+        self._layers.append(self.conv6)
+        self._layers_names.append('conv')
+        # fully connected
+        self.fc = nn.Sequential(
+            self.dropout,
+            self.pool,
+            self.lfc.create_layer('flatten'),
+            self.lfc.create_layer('fcDepthWidth')
+        )
+        self._layers.append(self.fc)
+        self.layers_params.append('fc')
+        # out
+        self.out = nn.Sequential(
+            self.dropout,
+            self.lfc.create_layer('fc128_Out')
+        )
+        self._layers.append(self.out)
+        self.layers_params.append('fc')
+
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = self.conv4(x)
-        x = self.conv5(x)
-        x = self.conv6(x)
-        x = self.out(x)
-        return x
+        self.a = []
+        self.h = []
+        input_ = x
+
+        for l in range(len(self._layers)):
+            self.h.append(input_)
+            a_l = self._layers[l](input_)
+            input_ = self.activation_fn(a_l)
+            if a_l.requires_grad:
+                a_l.retain_grad() 
+            self.a.append(a_l)
+
+        return self.a[len(self.a)-1]

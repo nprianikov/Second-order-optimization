@@ -1,35 +1,34 @@
 import torch
 from torch.nn.utils.convert_parameters import vector_to_parameters, parameters_to_vector
-
+import time
 
 class HessianFree(torch.optim.Optimizer):
     """
     Implements the Hessian-free algorithm presented in `Training Deep and
-    Recurrent Networks with Hessian-Free Optimization`_.
+    Recurrent Networks with Hessian-Free Optimization` https://doi.org/10.1007/978-3-642-35289-8_27.
+
     Arguments:
         params (iterable): iterable of parameters to optimize or dicts defining
-            parameter groups
-        lr (float, optional): learning rate (default: 1)
-        delta_decay (float, optional): Decay of the previous result of
-            computing delta with conjugate gradient method for the
-            initialization of the next conjugate gradient iteration
-        damping (float, optional): Initial value of the Tikhonov damping
-            coefficient. (default: 0.5)
-        max_iter (int, optional): Maximum number of Conjugate-Gradient
-            iterations (default: 50)
-        use_gnm (bool, optional): Use the generalized Gauss-Newton matrix:
-            probably solves the indefiniteness of the Hessian (Section 20.6)
-        verbose (bool, optional): Print statements (debugging)
+        lr (float, optional): learning rate (default: 1.0)
+        damping (float, optional): damping (default: 1.0)
+        supress_extremes (float, optional): supress extremes (default: 0.75)
+        delta_decay (float, optional): delta decay (default: 0.95)
+        cg_max_iter (int, optional): maximum number of CG iterations (default: 50)
+        eps (float, optional): precision tolerance to be achieved by CG (default: 1e-6)
+        use_gnm (bool, optional): use Gauss-Newton matrix instead of Hessian (default: True)
+        verbose (bool, optional): verbose (default: False)
     .. _Training Deep and Recurrent Networks with Hessian-Free Optimization:
-        https://doi.org/10.1007/978-3-642-35289-8_27
+        
+    Adapted from: https://github.com/fmeirinhos/pytorch-hessianfree
     """
 
     def __init__(self, params, 
                  lr=1.0, 
-                 damping=1e-2, 
+                 damping=1.0, 
                  supress_extremes=0.75, 
                  delta_decay=0.95, 
-                 cg_max_iter=100, 
+                 cg_max_iter=50,
+                 eps = 1e-6, 
                  use_gnm=True,
                  verbose=False):
 
@@ -48,6 +47,7 @@ class HessianFree(torch.optim.Optimizer):
                         delta_decay=delta_decay,
                         cg_max_iter=cg_max_iter,
                         use_gnm=use_gnm,
+                        eps=eps,
                         verbose=verbose)
         super(HessianFree, self).__init__(params, defaults)
 
@@ -55,8 +55,10 @@ class HessianFree(torch.optim.Optimizer):
             raise ValueError(
                 "HessianFree doesn't support per-parameter options (parameter groups)")
 
+        torch.cuda.empty_cache()
         self._params = self.param_groups[0]['params']
 
+  
     def _gather_flat_grad(self):
         views = list()
         for p in self._params:
@@ -68,6 +70,7 @@ class HessianFree(torch.optim.Optimizer):
                 view = p.grad.contiguous().view(-1)
             views.append(view)
         return torch.cat(views, 0)
+
 
     def step(self, closure, b=None, M_inv=None):
         """
@@ -137,12 +140,17 @@ class HessianFree(torch.optim.Optimizer):
         else:
             init_delta = torch.zeros_like(flat_params)
 
-        eps = torch.finfo(b.dtype).eps
+        #eps = torch.finfo(b.dtype).eps
+        eps = group['eps']
 
+        cg_start = time.time()
         # Conjugate-Gradient
         deltas, Ms = self._CG(A=A, b=b.neg(), x0=init_delta,
                               M=M, max_iter=cg_max_iter,
                               tol=1e1 * eps, eps=eps, martens=True)
+        cg_end = time.time()
+        if verbose:
+            print(f"CG time: {cg_end-cg_start}")
 
         # Update parameters
         delta = state['init_delta'] = deltas[-1]
@@ -153,6 +161,7 @@ class HessianFree(torch.optim.Optimizer):
         current_evals += 1
         state['func_evals'] += 1
 
+        backtrack_start = time.time()
         # Conjugate-Gradient backtracking (Section 20.8.7)
         if verbose:
             print("Loss before CG: {}".format(float(loss_before)))
@@ -166,6 +175,9 @@ class HessianFree(torch.optim.Optimizer):
             delta = d
             M = m
             loss_now = loss_prev
+        backtrack_end = time.time()
+        if verbose:
+            print(f"Backtrack time: {backtrack_end-backtrack_start}")
 
         if verbose:
             print("Loss after BT:  {}".format(float(loss_now)))
@@ -181,11 +193,12 @@ class HessianFree(torch.optim.Optimizer):
         if reduction_ratio < 0:
             group['init_delta'] = 0
 
+
         # Line Searching (Section 20.8.8)
-        beta = 0.1
+        beta = 0.6
         c = 1e-2
         min_improv = min(c * torch.dot(b, delta), 0)
-
+        linesearch_start = time.time()
         for _ in range(100):
             if float(loss_now) <= float(loss_before) + alpha * min_improv:
                 break
@@ -196,6 +209,9 @@ class HessianFree(torch.optim.Optimizer):
         else:  # No good update found
             alpha = 0.0
             loss_now = loss_before
+        linesearch_end = time.time()
+        if verbose:
+            print(f"Line search time: {linesearch_end-linesearch_start}")
 
         # Update the parameters (this time for real)
         vector_to_parameters(flat_params + alpha * delta, self._params)
@@ -291,7 +307,7 @@ class HessianFree(torch.optim.Optimizer):
         """
         Jv = self._Rop(output, self._params, vec)
 
-        gradient = torch.autograd.grad(loss, output, create_graph=True, allow_unused=True)
+        gradient = torch.autograd.grad(loss, output, create_graph=True)
         HJv = self._Rop(gradient, output, Jv)
 
         JHJv = torch.autograd.grad(
@@ -299,6 +315,7 @@ class HessianFree(torch.optim.Optimizer):
 
         # Tikhonov damping (Section 20.8.1)
         return parameters_to_vector(JHJv).detach() + damping * vec
+    
 
     @staticmethod
     def _Rop(y, x, v, create_graph=False):

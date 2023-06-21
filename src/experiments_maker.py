@@ -22,9 +22,9 @@ def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module,
         **kwargs: additional arguments for the specific optimizer
     """
     # set the seed for reproducibility
-    np.random.seed(cm.random_seeds[0])
-    torch.manual_seed(cm.random_seeds[0])
-    torch.cuda.manual_seed(cm.random_seeds[0])
+    np.random.seed(cm.random_seed)
+    torch.manual_seed(cm.random_seed)
+    torch.cuda.manual_seed(cm.random_seed)
     
     # choose model
     activation_fn_dict = {"tanh": nn.Tanh, "relu":nn.ReLU, 'sigmoid': nn.Sigmoid}
@@ -50,15 +50,13 @@ def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module,
     if config["optimizer"] == "SGD":
         optimizer = torch.optim.SGD(params=model.parameters(), lr=config["lr"])
     elif config["optimizer"] == "HessianFree":
-        optimizer = hessianfree.HessianFree(params=model.parameters(), **kwargs)
-    elif config["optimizer"] == "PB_BFGS":
-        optimizer = LBFGS(model.parameters(), lr=1., history_size=10, line_search='Wolfe', debug=True)
+        optimizer = hessianfree.HessianFree(params=model.parameters(), eps=1e-4, **kwargs)
+    elif config["optimizer"] == "S_BFGS":
+        optimizer = LBFGS(model.parameters(), lr=1., history_size=50, line_search='Wolfe', debug=False)
     elif config["optimizer"] == "K_BFGS":
-        optimizer = K_BFGS(model.parameters(), algorithm='K-BFGS', lr=0.3, lambda_damping=0.3, verbose=True)
-        optimizer.optimizer_initialization(model=model, train_dataset=train_data_loader, batch_size=config['batch_size'])
-    elif config["optimizer"] == "K_LBFGS":
-        optimizer = K_BFGS(model.parameters(), algorithm='K-BFGS(L)', lr=0.3, lambda_damping=0.3, verbose=True)
-        optimizer.optimizer_initialization(model=model, train_dataset=train_data_loader, batch_size=config['batch_size'])
+        optimizer = K_BFGS(model, train_data_loader, algorithm='K-BFGS', lr=0.3, lambda_damping=0.3, verbose=False)
+    elif config["optimizer"] == "K_BFGS(L)":
+        optimizer = K_BFGS(model, train_data_loader, algorithm='K-BFGS(L)', lr=0.3, lambda_damping=0.3, verbose=False)
     else:
         raise ValueError("Unknown optimizer type")
 

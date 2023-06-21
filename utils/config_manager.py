@@ -23,11 +23,13 @@ ARG_DEFS = {
 
 wandb_modes = ["disabled", "online"]
 device = "cuda" if torch.cuda.is_available() else "cpu"
+device = torch.device(device)
 loss_fn = nn.CrossEntropyLoss()
-random_seeds = [42, 47, 68, 27, 24]
+seeds = [42, 47, 68, 27, 24]
+random_seed = seeds[0]
 
 datasets_names = ['mnist', 'tmnist','fashion_mnist', 'cifar10']
-optimizers_names = ['SGD', 'HessianFree', 'PB_BFGS', 'K_BFGS', 'K_LBFGS']
+optimizers_names = ['SGD', 'HessianFree', 'S_BFGS', 'K_BFGS', 'K_LBFGS']
 models_names = ['SmallCNN', 'DepthCNN', 'WidthCNN', 'DepthWidthCNN']
 
 
@@ -88,17 +90,17 @@ def create_config(*args, **kwargs):
     '''
     Create a config dictionary from the command line arguments and typed arguments.
     Deafult values are used if no arguments are provided:\n
-    epochs = 1\n 
-    lr = 0.001\n 
-    batch_size = 32\n 
-    dataset = mnist\n 
-    optimizer = SGD\n 
-    model = SmallCNN\n 
-    wandb_log = 3\n 
+    epochs = 1 \n 
+    lr = 0.001 \n 
+    batch_size = 32 \n 
+    dataset = mnist ['mnist', 'tmnist','fashion_mnist', 'cifar10']\n 
+    optimizer = SGD ['SGD', 'HessianFree', 'S_BFGS', 'K_BFGS', 'K_LBFGS']\n 
+    model = SmallCNN ['SmallCNN', 'DepthCNN', 'WidthCNN', 'DepthWidthCNN']\n 
+    wandb_log = 3 [0 - all, 1 - gradients, 2 - paramters, 3 - none]\n 
     wandb_log_freq = 0\n 
     wandb_log_batch = 0\n 
     slice_size = 1.0\n 
-    activation_fn = Tanh\n 
+    activation_fn = Tanh [Tanh, ReLU, Sigmoid]\n 
     dropout = 0.0\n 
     checkpoints = 0\n
     '''
