@@ -28,13 +28,14 @@ if args.loop == 1:
     # specify parameters: lists for iterables
     config = cm.create_config(vars(args),
                               epochs=5,
+                              lr = [3e-4, 3e-3, 3e-2, 3e-1, 1, 3, 10],
                               dataset=cm.datasets_names,
                               optimizer=cm.optimizers_names[0],
                               model=cm.models_names,
                               wandb_log_freq=0,
                               wandb_log_batch=32,
                               batch_size=128,
-                              checkpoints=10)
+                              checkpoints=0)
     # update sweep config
     sweep_config['parameters'].update(cm.wrap_values(config))
     # init sweep

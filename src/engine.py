@@ -77,7 +77,7 @@ def train_step(model: torch.nn.Module,
         elif optimizer.__class__.__name__ in ["K_BFGS", "K_BFGS(L)"]:
             data_ = optimizer.data_
             params = optimizer.params
-            params['i'] = batch_counter
+            params['i'] = batch
             # Forward
             y_pred = model.forward(X)
             a = model.a
@@ -124,7 +124,7 @@ def train_step(model: torch.nn.Module,
             optimizer.step()
 
         # Log metrics
-        if config["wandb_log_batch"] > 0 and batch % config["wandb_log_batch"] == 0:
+        if config["wandb_log_batch"] > 0 and (batch+1) % config["wandb_log_batch"] == 0:
             print(f"Batch: {batch_counter}/{N}\nLoss: {loss.item()}\nAccuracy: {accuracy_fn(y_pred.argmax(dim=1), y).item()}\n-------")
             wandb.log({"batch_train_loss": loss.item(), "batch_train_accuracy": accuracy_fn(y_pred.argmax(dim=1), y).item()})
         # Log checkpoints

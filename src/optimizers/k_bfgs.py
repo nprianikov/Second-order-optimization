@@ -141,7 +141,13 @@ class K_BFGS(torch.optim.Optimizer):
 
         # intermediate weights update for a copy of the model
         # model_new = copy.deepcopy(data_['model'])
-        model_new = type(data_['model'])()
+        model_new = type(data_['model'])(data_['model'].model_name, 
+                                         data_['model'].input_shape, 
+                                         data_['model'].output_shape, 
+                                         data_['model'].activation, 
+                                         data_['model'].p, 
+                                         data_['model'].dataset
+                                         )
         model_new.load_state_dict(data_['model'].state_dict())
 
         for l in range(model_new.numlayers):
@@ -230,7 +236,7 @@ def Kron_BFGS_update_per_layer(data_, params, l, action_h, action_a, step_):
     elif step_ == 2:
         if i % params['Kron_BFGS_A_inv_freq'] != 0:
             return [], data_
-
+        print('Im here!')
         Kron_BFGS_matrices_l = data_['Kron_BFGS_matrices'][l]
         
         a_grad_next = data_['a_grad_next']

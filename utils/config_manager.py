@@ -6,7 +6,7 @@ from torch import nn
 ARG_DEFS = {
     'loop': 0,
     'epochs': 1,
-    'lr': 1e-3,
+    'lr': 3e-3,
     'batch_size': 32,
     'dataset': "mnist",
     'optimizer': "SGD",
@@ -28,8 +28,8 @@ loss_fn = nn.CrossEntropyLoss()
 seeds = [42, 47, 68, 27, 24]
 random_seed = seeds[0]
 
-datasets_names = ['mnist', 'tmnist','fashion_mnist', 'cifar10']
-optimizers_names = ['SGD', 'HessianFree', 'S_BFGS', 'K_BFGS', 'K_LBFGS']
+datasets_names = ['mnist','fashion_mnist', 'cifar10']
+optimizers_names = ['SGD', 'HessianFree', 'S_BFGS(L)', 'K_BFGS', 'K_BFGS(L)']
 models_names = ['SmallCNN', 'DepthCNN', 'WidthCNN', 'DepthWidthCNN']
 
 
@@ -60,7 +60,7 @@ def create_parser():
     parser.add_argument('--epochs', default=ARG_DEFS['epochs'], type=int, required=False, help='Number of epochs to train for')
     parser.add_argument('--lr', default=ARG_DEFS['lr'], type=float, required=False, help='Learning rate for training')
     parser.add_argument('--batch_size', default=ARG_DEFS['batch_size'], type=int, required=False, help='Batch size for training')
-    parser.add_argument('--dataset', default=ARG_DEFS['dataset'], type=str, required=False, help='Name of the dataset to train on: mnist, tmnist, fashion_mnist, cifar10')
+    parser.add_argument('--dataset', default=ARG_DEFS['dataset'], type=str, required=False, help='Name of the dataset to train on: mnist, fashion_mnist, cifar10')
     parser.add_argument('--optimizer', default=ARG_DEFS['optimizer'], type=str, required=False, help='Name of the optimizer to train: SGD, HessianFree, PB_BFGS, K_BFGS, K_LBFGS')
     parser.add_argument('--model', default=ARG_DEFS['model'], type=str, required=False, help='Name of the model to train: SmallCNN, DepthCNN, WidthCNN, DepthWidthCNN')
     parser.add_argument('--wandb_mode', default=ARG_DEFS['wandb_mode'], type=int, required=False, help='Wandb mode. 0: Disabled, 1: Online')
@@ -93,8 +93,8 @@ def create_config(*args, **kwargs):
     epochs = 1 \n 
     lr = 0.001 \n 
     batch_size = 32 \n 
-    dataset = mnist ['mnist', 'tmnist','fashion_mnist', 'cifar10']\n 
-    optimizer = SGD ['SGD', 'HessianFree', 'S_BFGS', 'K_BFGS', 'K_LBFGS']\n 
+    dataset = mnist ['mnist','fashion_mnist', 'cifar10']\n 
+    optimizer = SGD ['SGD', 'HessianFree', 'S_BFGS', 'K_BFGS', 'K_BFGS(L)']\n 
     model = SmallCNN ['SmallCNN', 'DepthCNN', 'WidthCNN', 'DepthWidthCNN']\n 
     wandb_log = 3 [0 - all, 1 - gradients, 2 - paramters, 3 - none]\n 
     wandb_log_freq = 0\n 

@@ -8,33 +8,6 @@ from torch.utils.data import Subset, DataLoader
 from torchvision import datasets
 from torchvision.transforms import ToTensor
 
-class TMNISTDataset(torch.utils.data.Dataset):
-    def __init__(self, csv_file, transform=None):
-        self.data = pd.read_csv(csv_file)
-        self.transform = transform
-        self.classes = ['0 - zero',
-                        '1 - one',
-                        '2 - two',
-                        '3 - three',
-                        '4 - four',
-                        '5 - five',
-                        '6 - six',
-                        '7 - seven',
-                        '8 - eight',
-                        '9 - nine']
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
-        image = self.data.drop(columns=["names", "labels"]).iloc[idx].values.reshape(28, 28)
-        label = self.data["labels"].iloc[idx]
-        if self.transform:
-            image = self.transform(image)
-            image = image.type(torch.float32)
-        return image, label
 
 
 def train_test_loaders(dataset: str, batch_size=32, slice_size=1.0):
@@ -58,13 +31,6 @@ def train_test_loaders(dataset: str, batch_size=32, slice_size=1.0):
         train_data = datasets.CIFAR10(root=root_path, train=True, download=True, transform=ToTensor(),
                                       target_transform=None)
         test_data = datasets.CIFAR10(root=root_path, train=False, download=True, transform=ToTensor())
-    elif dataset == "tmnist":
-        path = os.path.join(os.getcwd(), '..', 'datasets', 'TMNIST', 'TMNIST_Data.csv')
-        tmnist_dataset = TMNISTDataset(csv_file=path, transform=ToTensor())
-        # split the dataset into train and test with a fixed random seed and ratio 5:1
-        train_size = int(0.8 * len(tmnist_dataset))
-        test_size = len(tmnist_dataset) - train_size
-        train_data, test_data = torch.utils.data.random_split(tmnist_dataset, [train_size, test_size])
     else:
         return ValueError("Dataset not supported")
     

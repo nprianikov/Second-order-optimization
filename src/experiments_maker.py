@@ -9,7 +9,7 @@ from src.optimizers.k_bfgs import K_BFGS
 
 import src.data_setup as data_setup
 import src.optimizers.hessianfree as hessianfree
-from src.model_builder import SmallCNN, DepthCNN, WidthCNN, DepthWidthCNN
+from src.model_builder import ModelCNN
 import utils.config_manager as cm
 
 def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module, torch.utils.data.DataLoader,
@@ -28,8 +28,8 @@ def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module,
     
     # choose model
     activation_fn_dict = {"tanh": nn.Tanh, "relu":nn.ReLU, 'sigmoid': nn.Sigmoid}
-    models_dict = {"SmallCNN": SmallCNN, "DepthCNN": DepthCNN, "WidthCNN": WidthCNN, "DepthWidthCNN": DepthWidthCNN}
-    model = models_dict[config["model"]](
+    model = ModelCNN(
+        model_name=config["model"],
         input_shape=3 if config["dataset"] == "cifar10" else 1,
         activation_fn=activation_fn_dict[config["activation_fn"].lower()], 
         p=config["dropout"],
@@ -51,12 +51,12 @@ def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module,
         optimizer = torch.optim.SGD(params=model.parameters(), lr=config["lr"])
     elif config["optimizer"] == "HessianFree":
         optimizer = hessianfree.HessianFree(params=model.parameters(), eps=1e-4, **kwargs)
-    elif config["optimizer"] == "S_BFGS":
+    elif config["optimizer"] == "S_BFGS(L)":
         optimizer = LBFGS(model.parameters(), lr=1., history_size=50, line_search='Wolfe', debug=False)
     elif config["optimizer"] == "K_BFGS":
-        optimizer = K_BFGS(model, train_data_loader, algorithm='K-BFGS', lr=0.3, lambda_damping=0.3, verbose=False)
+        optimizer = K_BFGS(model, train_data_loader, algorithm='K-BFGS', lr=config["lr"], lambda_damping=1, debug=False, verbose=False)
     elif config["optimizer"] == "K_BFGS(L)":
-        optimizer = K_BFGS(model, train_data_loader, algorithm='K-BFGS(L)', lr=0.3, lambda_damping=0.3, verbose=False)
+        optimizer = K_BFGS(model, train_data_loader, algorithm='K-BFGS(L)', lr=config["lr"], lambda_damping=1, debug=True, verbose=False)
     else:
         raise ValueError("Unknown optimizer type")
 
