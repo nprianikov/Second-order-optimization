@@ -95,8 +95,7 @@ class K_BFGS(torch.optim.Optimizer):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-        device = cm.device 
-        params['device'] = device
+        params['device'] = cm.device 
         params['momentum_gradient_rho'] = rho_momentum
         
 
@@ -147,12 +146,13 @@ class K_BFGS(torch.optim.Optimizer):
                                          data_['model'].activation, 
                                          data_['model'].p, 
                                          data_['model'].dataset
-                                         )
+                                         ).to(params['device'])
         model_new.load_state_dict(data_['model'].state_dict())
-
+        
+        
         for l in range(model_new.numlayers):
             for key in model_new.layers_weights[l]:
-                model_new.layers_weights[l][key].data += params['alpha'] * p[l][key].data
+                model_new.layers_weights[l][key].data = model_new.layers_weights[l][key].data.to(params['device']) + params['alpha'] * p[l][key].data.to(params['device'])
 
         # forward-backward pass
         z_next = model_new.forward(data_['X_mb'])
@@ -579,6 +579,11 @@ def Kron_LBFGS_append_s_y(s, y, s_y_pairs, g_k, gamma, params):
 
 
 def get_BFGS_formula(H, s, y, g_k):
+    import gc
+    gc.collect()
+    torch.cuda.empty_cache()
+    torch.cuda.empty_cache()
+    
     s = s.data
     y = y.data
     rho_inv = torch.dot(s, y)
@@ -637,7 +642,7 @@ def train_initialization(data_, params):
     if params['N1'] < params['num_train_data']*params['N1']:        
         for batch, (X, y) in enumerate(data_['dataset']): 
             torch.cuda.empty_cache()
-            X.to(device)
+            X = X.to(device)
             z = model.forward(X)
             a = model.a
             h = model.h
@@ -721,10 +726,10 @@ def update_parameter(p_torch, model, params):
 
     for l in range(numlayers):
         if params['layers_params'][l]['name'] == 'conv':
-            model.layers_weights[l]['W'].data += alpha * p_torch[l]['W'].data
-            model.layers_weights[l]['b'].data += alpha * p_torch[l]['b'].data
+            model.layers_weights[l]['W'].data += alpha * p_torch[l]['W'].data.to(device)
+            model.layers_weights[l]['b'].data += alpha * p_torch[l]['b'].data.to(device)
         elif params['layers_params'][l]['name'] == 'fc':
-            model.layers_weights[l]['W'].data += alpha * p_torch[l]['W'].data
-            model.layers_weights[l]['b'].data += alpha * p_torch[l]['b'].data
+            model.layers_weights[l]['W'].data += alpha * p_torch[l]['W'].data.to(device)
+            model.layers_weights[l]['b'].data += alpha * p_torch[l]['b'].data.to(device)
         
     return model

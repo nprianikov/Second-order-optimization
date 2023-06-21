@@ -50,7 +50,7 @@ def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module,
     if config["optimizer"] == "SGD":
         optimizer = torch.optim.SGD(params=model.parameters(), lr=config["lr"])
     elif config["optimizer"] == "HessianFree":
-        optimizer = hessianfree.HessianFree(params=model.parameters(), eps=1e-4, **kwargs)
+        optimizer = hessianfree.HessianFree(params=model.parameters(), eps=1e-3, **kwargs)
     elif config["optimizer"] == "S_BFGS(L)":
         optimizer = LBFGS(model.parameters(), lr=1., history_size=50, line_search='Wolfe', debug=False)
     elif config["optimizer"] == "K_BFGS":

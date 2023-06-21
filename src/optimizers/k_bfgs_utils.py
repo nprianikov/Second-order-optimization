@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 import scipy
 import copy
-
+import utils.config_manager as cm
 
 
 def get_zero_torch(params):
@@ -27,7 +27,7 @@ def get_plus_torch(model_grad, delta):
     for l in range(len(model_grad)):
         sum_p_l = {}
         for key in model_grad[l]:
-            sum_p_l[key] = model_grad[l][key] + delta[l][key]
+            sum_p_l[key] = model_grad[l][key].to(cm.device) + delta[l][key].to(cm.device)
         sum_p.append(sum_p_l)
     return sum_p
 
@@ -55,7 +55,7 @@ def get_multiply_scalar_no_grad(alpha, delta):
     for l in range(len(delta)):
         alpha_p_l = {}
         for key in delta[l]:
-            alpha_p_l[key] = alpha * delta[l][key].data
+            alpha_p_l[key] = alpha * delta[l][key].data.to(cm.device)
         alpha_p.append(alpha_p_l)
     return alpha_p
 
@@ -73,28 +73,18 @@ def get_opposite(delta):
 
 
 def get_model_grad(model, params):
+    device = params['device']
     model_grad_torch = []
-    # for l in range(model.numlayers):
-    #     model_grad_torch_l = {}
-
-    #     for key in model.layers_weights[l]:
-    #         if model.layers_params[l]['name'] == 'conv':
-    #             model_grad_torch_l[key] = copy.deepcopy(model.layers_weights[l][key].grad).reshape(model.layers_weights[l][key].data.size()[0], -1)
-    #         elif model.layers_params[l]['name'] == 'fc':
-    #             model_grad_torch_l[key] = copy.deepcopy(model.layers_weights[l][key].grad)
-    #     model_grad_torch.append(model_grad_torch_l)
-
     grouped = zip(*[iter(model.parameters())]*2)
     for l, (param1, param2) in enumerate(grouped):
         model_grad_torch_l = {}
         if model.layers_params[l]['name'] == 'conv':
-            model_grad_torch_l['W'] = copy.deepcopy(param1.grad).reshape(param1.data.size()[0], -1)
+            model_grad_torch_l['W'] = copy.deepcopy(param1.grad).reshape(param1.data.size()[0], -1).to(device)
         elif model.layers_params[l]['name'] == 'fc':
-            model_grad_torch_l['W'] = copy.deepcopy(param1.grad)
-        model_grad_torch_l['b'] = copy.deepcopy(param2.grad)
+            model_grad_torch_l['W'] = copy.deepcopy(param1.grad).to(device)
+        model_grad_torch_l['b'] = copy.deepcopy(param2.grad).to(device)
         model_grad_torch.append(model_grad_torch_l)
     return model_grad_torch
-
 
 
 def get_homo_grad(model_grad_N1, params):
