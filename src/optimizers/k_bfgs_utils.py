@@ -1,3 +1,5 @@
+# Adapted from: https://github.com/renyiryry/kbfgs_neurips2020_public
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -79,10 +81,10 @@ def get_model_grad(model, params):
     for l, (param1, param2) in enumerate(grouped):
         model_grad_torch_l = {}
         if model.layers_params[l]['name'] == 'conv':
-            model_grad_torch_l['W'] = copy.deepcopy(param1.grad).reshape(param1.data.size()[0], -1).to(device)
+            model_grad_torch_l['W'] = copy.deepcopy(param1.grad).reshape(param1.data.size()[0], -1).detach().to(device)
         elif model.layers_params[l]['name'] == 'fc':
-            model_grad_torch_l['W'] = copy.deepcopy(param1.grad).to(device)
-        model_grad_torch_l['b'] = copy.deepcopy(param2.grad).to(device)
+            model_grad_torch_l['W'] = copy.deepcopy(param1.grad).detach().to(device)
+        model_grad_torch_l['b'] = copy.deepcopy(param2.grad).detach().to(device)
         model_grad_torch.append(model_grad_torch_l)
     return model_grad_torch
 

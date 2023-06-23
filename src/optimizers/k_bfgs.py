@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import copy 
 from torch.nn.utils.convert_parameters import vector_to_parameters, parameters_to_vector
 
-from optimizers.k_bfgs_utils import *
+from src.optimizers.k_bfgs_utils import *
 import utils.config_manager as cm
 
 
@@ -163,7 +163,7 @@ class K_BFGS(torch.optim.Optimizer):
         model_new.zero_grad()
         loss.backward()
         
-        a_grad_next = [len(data_['X_mb']) * (a_l.grad) for a_l in a_next]
+        a_grad_next = [len(data_['X_mb']) * (a_l.grad.detach()) for a_l in a_next]
         for l in range(params['numlayers']):
             if params['layers_params'][l]['name'] == 'conv':
                 a_grad_next[l] = a_grad_next[l].mean(dim=[2,3])
@@ -172,6 +172,8 @@ class K_BFGS(torch.optim.Optimizer):
         a_next, h_next = reshape_a_h(a_next, h_next, params['layers_params'])
         data_['h_next'] = h_next
         data_['a_next'] = a_next
+        
+        del model_new
         
         for l in range(numlayers):
             action_h = params['Kron_BFGS_action_h']
@@ -210,14 +212,15 @@ def Kron_BFGS_update_per_layer(data_, params, l, action_h, action_a, step_):
                 1
             else:
                 beta_ = params['Kron_BFGS_A_decay']
-                homo_h_l = torch.cat((data_['h_N2'][l], torch.ones(N1, 1, device=device)), dim=1)
+
+                homo_h_l = torch.cat((data_['h_N2'][l], torch.ones(data_['h_N2'][l].size()[0], 1, device=device)), dim=1)
                 
                 decay_ = beta_
                 weight_ = 1-beta_
             
                 A_l = decay_ * A_l + weight_ * torch.mm(homo_h_l.t(), homo_h_l).data / data_['h_N2'][l].size()[0]
-
-            Kron_BFGS_matrices_l['A'] = A_l
+                del homo_h_l
+            Kron_BFGS_matrices_l['A'] = A_l.detach()
 
             if action_h in ['Hessian-action-BFGS', 'Hessian-action-LBFGS']:
                 epsilon_ = params['Kron_BFGS_A_LM_epsilon'] * np.sqrt(data_['model'].layers_params[l]['tau'])
@@ -228,15 +231,21 @@ def Kron_BFGS_update_per_layer(data_, params, l, action_h, action_a, step_):
                 if action_h in ['Hessian-action-BFGS']:
                     if i == 0:
                         Kron_BFGS_matrices_l['H']['h'] = A_l_LM.inverse()
-                    
+                del A_l_LM
+            del A_l
+            torch.cuda.empty_cache()
+            import gc
+            
         data_['Kron_BFGS_matrices'][l] = Kron_BFGS_matrices_l
+        del Kron_BFGS_matrices_l
+        gc.collect()
         delta_l = Kron_BFGS_compute_direction(model_homo_grad, l, data_, params)
         return delta_l, data_
     
     elif step_ == 2:
         if i % params['Kron_BFGS_A_inv_freq'] != 0:
             return [], data_
-        print('Im here!')
+
         Kron_BFGS_matrices_l = data_['Kron_BFGS_matrices'][l]
         
         a_grad_next = data_['a_grad_next']
@@ -662,8 +671,8 @@ def train_initialization(data_, params):
                     h_l = torch.cat([h_l.data, ones], dim=1)
                     A_j = torch.matmul(torch.t(h_l), h_l) / h_l.size(0)
                 data_['Kron_BFGS_matrices'][l]['A'] *= (j-1)/j
-                data_['Kron_BFGS_matrices'][l]['A'] += 1/j * A_j
-
+                data_['Kron_BFGS_matrices'][l]['A'] += 1/j * A_j.detach()
+                del A_j
             if params['debug']:
                 break    
 
@@ -675,15 +684,15 @@ def reshape_a_h(a, h, layers_params, kernel_size=3, stride=1):
     h_new = []
     for l in range(len(a)):
         if layers_params[l]['name'] == 'conv':
-            h_l = h[l].unfold(dimension=3, size=kernel_size, step=stride)
+            h_l = h[l].unfold(dimension=3, size=kernel_size, step=stride).detach()
             h_l = h_l.unfold(2, kernel_size, stride)
             h_l = h_l.mean(dim=[2,3])
             h_l = h_l.reshape(-1, layers_params[l]['input_size'])
-            a_l = a[l]
+            a_l = a[l].detach()
             a_l = a_l.mean(dim=[2,3])
         elif layers_params[l]['name'] == 'fc':
-            h_l = h[l]
-            a_l = a[l]
+            h_l = h[l].detach()
+            a_l = a[l].detach()
         a_new.append(a_l)
         h_new.append(h_l)
     return a_new, h_new
@@ -699,18 +708,18 @@ def get_second_order_caches(z, a, h, data_, params):
     X_mb = data_['X_mb']
 
     data_['X_mb_N1'] = X_mb
-    X_mb_N2 = X_mb[N2_index]
+    X_mb_N2 = X_mb
     data_['X_mb_N2'] = X_mb_N2
 
     # Empirical Fisher
     t_mb = data_['t_mb']
-    data_['t_mb_pred_N2'] = t_mb[N2_index]
+    data_['t_mb_pred_N2'] = t_mb
     # collect pre-activations gradients
-    data_['a_grad_N2'] = [N2 * (a_l.grad)[N2_index] for a_l in a]
+    data_['a_grad_N2'] = [N2 * (a_l.grad.detach()) for a_l in a]
     # reshape a and h
     a, h, = reshape_a_h(a, h, params['layers_params'])
-    data_['h_N2'] = [h_l[N2_index].data for h_l in h]
-    data_['a_N2'] = [a_l[N2_index].data for a_l in a]
+    data_['h_N2'] = [h_l.data.detach() for h_l in h]
+    data_['a_N2'] = [a_l.data.detach() for a_l in a]
     # reshape gradients
     for l in range(params['numlayers']):
         if params['layers_params'][l]['name'] == 'conv':
@@ -725,6 +734,8 @@ def update_parameter(p_torch, model, params):
     device = params['device']
 
     for l in range(numlayers):
+        model.layers_weights[l]['W'].data = model.layers_weights[l]['W'].data.to(device)
+        model.layers_weights[l]['b'].data = model.layers_weights[l]['b'].data.to(device)
         if params['layers_params'][l]['name'] == 'conv':
             model.layers_weights[l]['W'].data += alpha * p_torch[l]['W'].data.to(device)
             model.layers_weights[l]['b'].data += alpha * p_torch[l]['b'].data.to(device)

@@ -26,10 +26,10 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 device = torch.device(device)
 loss_fn = nn.CrossEntropyLoss()
 seeds = [42, 47, 68, 27, 24]
-random_seed = seeds[0]
+random_seed = seeds[4]
 
 datasets_names = ['mnist','fashion_mnist', 'cifar10']
-optimizers_names = ['SGD', 'HessianFree', 'S_BFGS(L)', 'K_BFGS', 'K_BFGS(L)']
+optimizers_names = ['SGD', 'S_BFGS(L)', 'K_BFGS(L)']
 models_names = ['SmallCNN', 'DepthCNN', 'WidthCNN', 'DepthWidthCNN']
 
 

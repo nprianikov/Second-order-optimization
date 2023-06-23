@@ -29,14 +29,33 @@ class ModelCNN(nn.Module):
         self.h = []
         # model
         if model_name == 'SmallCNN':
-            self.conv1 = self.lfc.create_layer('convIn_32')
-            self.conv2 = nn.Sequential(self.pool, self.lfc.create_layer('conv32_32'))
-            self.conv3 = nn.Sequential(self.pool, self.lfc.create_layer('conv32_64'))
+            self.conv1 = self.lfc.create_layer('convIn_16')
+            self.conv2 = nn.Sequential(self.pool, self.lfc.create_layer('conv16_16'))
+            self.conv3 = nn.Sequential(self.pool, self.lfc.create_layer('conv16_32'))
             self.flat = nn.Sequential(self.pool, self.lfc.create_layer('flatten'))
             self.fc = nn.Sequential(self.lfc.create_layer('fcSmall'))
-            self.out = nn.Sequential(self.dropout, self.lfc.create_layer('fc64_Out'))
+            self.out = nn.Sequential(self.dropout, self.lfc.create_layer('fc32_Out'))
             self._layers = [self.conv1, self.conv2, self.conv3, self.fc, self.out]
         elif model_name == 'DepthCNN':
+            self.conv1 = self.lfc.create_layer('convIn_16')
+            self.conv2 = nn.Sequential(self.dropout, self.lfc.create_layer('conv16_16'))
+            self.conv3 = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('conv16_16'))
+            self.conv4 = nn.Sequential(self.dropout, self.lfc.create_layer('conv16_16'))
+            self.conv5 = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('conv16_32'))
+            self.conv6 = nn.Sequential(self.dropout, self.lfc.create_layer('conv32_32'))
+            self.flat = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('flatten'))
+            self.fc = nn.Sequential(self.lfc.create_layer('fcDepth'))
+            self.out = nn.Sequential(self.dropout, self.lfc.create_layer('fc32_Out'))
+            self._layers = [self.conv1, self.conv2, self.conv3, self.conv4, self.conv5, self.conv6, self.fc, self.out]
+        elif model_name == 'WidthCNN':
+            self.conv1 = self.lfc.create_layer('convIn_32')
+            self.conv2 = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('conv32_32'))
+            self.conv3 = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('conv32_64'))
+            self.flat = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('flatten'))
+            self.fc = nn.Sequential(self.lfc.create_layer('fcWidth'))
+            self.out = nn.Sequential(self.dropout, self.lfc.create_layer('fc64_Out'))
+            self._layers = [self.conv1, self.conv2, self.conv3, self.fc, self.out]
+        elif model_name == 'DepthWidthCNN':
             self.conv1 = self.lfc.create_layer('convIn_32')
             self.conv2 = nn.Sequential(self.dropout, self.lfc.create_layer('conv32_32'))
             self.conv3 = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('conv32_32'))
@@ -44,27 +63,8 @@ class ModelCNN(nn.Module):
             self.conv5 = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('conv32_64'))
             self.conv6 = nn.Sequential(self.dropout, self.lfc.create_layer('conv64_64'))
             self.flat = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('flatten'))
-            self.fc = nn.Sequential(self.lfc.create_layer('fcDepth'))
-            self.out = nn.Sequential(self.dropout, self.lfc.create_layer('fc64_Out'))
-            self._layers = [self.conv1, self.conv2, self.conv3, self.conv4, self.conv5, self.conv6, self.fc, self.out]
-        elif model_name == 'WidthCNN':
-            self.conv1 = self.lfc.create_layer('convIn_64')
-            self.conv2 = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('conv64_64'))
-            self.conv3 = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('conv64_128'))
-            self.flat = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('flatten'))
-            self.fc = nn.Sequential(self.lfc.create_layer('fcWidth'))
-            self.out = nn.Sequential(self.dropout, self.lfc.create_layer('fc128_Out'))
-            self._layers = [self.conv1, self.conv2, self.conv3, self.fc, self.out]
-        elif model_name == 'DepthWidthCNN':
-            self.conv1 = self.lfc.create_layer('convIn_64')
-            self.conv2 = nn.Sequential(self.dropout, self.lfc.create_layer('conv64_64'))
-            self.conv3 = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('conv64_64'))
-            self.conv4 = nn.Sequential(self.dropout, self.lfc.create_layer('conv64_64'))
-            self.conv5 = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('conv64_128'))
-            self.conv6 = nn.Sequential(self.dropout, self.lfc.create_layer('conv128_128'))
-            self.flat = nn.Sequential(self.dropout, self.pool, self.lfc.create_layer('flatten'))
             self.fc = nn.Sequential(self.lfc.create_layer('fcDepthWidth') )
-            self.out = nn.Sequential(self.dropout, self.lfc.create_layer('fc128_Out'))
+            self.out = nn.Sequential(self.dropout, self.lfc.create_layer('fc64_Out'))
             self._layers = [self.conv1, self.conv2, self.conv3, self.conv4, self.conv5, self.conv6, self.fc, self.out]
         # layers names
         self._layers_names = ['conv' if (isinstance(layer, nn.Conv2d) or any([isinstance(l, nn.Conv2d) for l in layer])) 

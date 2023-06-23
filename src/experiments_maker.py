@@ -50,13 +50,13 @@ def make(config: Dict, device: torch.device, **kwargs) -> Tuple[torch.nn.Module,
     if config["optimizer"] == "SGD":
         optimizer = torch.optim.SGD(params=model.parameters(), lr=config["lr"])
     elif config["optimizer"] == "HessianFree":
-        optimizer = hessianfree.HessianFree(params=model.parameters(), eps=1e-3, **kwargs)
+        optimizer = hessianfree.HessianFree(params=model.parameters(), eps=1e-4, **kwargs)
     elif config["optimizer"] == "S_BFGS(L)":
         optimizer = LBFGS(model.parameters(), lr=1., history_size=50, line_search='Wolfe', debug=False)
     elif config["optimizer"] == "K_BFGS":
-        optimizer = K_BFGS(model, train_data_loader, algorithm='K-BFGS', lr=config["lr"], lambda_damping=1, debug=False, verbose=False)
+        optimizer = K_BFGS(model, train_data_loader, algorithm='K-BFGS', lr=config["lr"], lambda_damping=0.3, debug=True, verbose=False)
     elif config["optimizer"] == "K_BFGS(L)":
-        optimizer = K_BFGS(model, train_data_loader, algorithm='K-BFGS(L)', lr=config["lr"], lambda_damping=1, debug=True, verbose=False)
+        optimizer = K_BFGS(model, train_data_loader, algorithm='K-BFGS(L)', lr=config["lr"], lambda_damping=0.3, debug=True, verbose=False)
     else:
         raise ValueError("Unknown optimizer type")
 
